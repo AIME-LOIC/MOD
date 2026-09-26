@@ -17,6 +17,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 
 const PORT = Number(process.argv[2] || process.env.PORT) || 8080;
 const TICK = 50;                    // ms between state broadcasts
@@ -84,18 +85,27 @@ function roomBoard(r) {
 /* ---------------- static files ---------------- */
 const fileCache = new Map();
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.glb': 'model/gltf-binary', '.png': 'image/png', '.ico': 'image/x-icon' };
-function serveFile(res, name) {
+function serveFile(res, name, req) {
   if (!/^[\w. -]+$/.test(name) || name.includes('..')) { res.writeHead(404); res.end('not found'); return; }
   const full = path.join(__dirname, name);
   let mt = 0;
   try { mt = fs.statSync(full).mtimeMs; } catch (e) { res.writeHead(404); res.end('not found'); return; }
   const c = fileCache.get(full);
   if (!c || c.m !== mt) {
-    try { fileCache.set(full, { m: mt, b: fs.readFileSync(full) }); } catch (e) { res.writeHead(404); res.end('not found'); return; }
+    try { const b = fs.readFileSync(full); fileCache.set(full, { m: mt, b, g: zlib.gzipSync(b, { level: 9 }) }); } catch (e) { res.writeHead(404); res.end('not found'); return; }
   }
   const ext = path.extname(name).toLowerCase();
-  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Access-Control-Allow-Origin': '*', 'X-Content-Type-Options': 'nosniff' });
-  res.end(fileCache.get(full).b);
+  const cc = fileCache.get(full);
+  const gz = !!req && /gzip/.test(String(req.headers['accept-encoding'] || '')) && /\.(html|js|json|css|txt)$/.test(name); /* glb is already compressed */
+  if (gz) res.setHeader('Content-Encoding', 'gzip');
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Access-Control-Allow-Origin': '*',
+    'X-Content-Type-Options': 'nosniff',
+    'Cache-Control': 'public, max-age=86400',
+    'Content-Length': (gz ? cc.g : cc.b).length
+  });
+  res.end(gz ? cc.g : cc.b);
 }
 
 /* ---------------- HTTP ---------------- */
@@ -120,7 +130,7 @@ const server = http.createServer((req, res) => {
     return;
   }
   if (url === '/' || url === '/index.html') url = '/compound_game.html';
-  serveFile(res, url.slice(1));
+  serveFile(res, url.slice(1), req);
 });
 
 /* ---------------- websocket plumbing (no deps) ---------------- */
@@ -195,7 +205,8 @@ server.on('upgrade', (req, socket) => {
         pl.name = String(m.name || 'Rookie').replace(/[^\w \-.]/g, '').trim().slice(0, 16) || 'Rookie';
         pl.id = (typeof m.pid === 'string' && m.pid.length <= 32 && /^[\w-]+$/.test(m.pid)) ? m.pid : pl.id;
         let rname, map = String(m.map || 'compound').slice(0, 16), mode = String(m.mode || 'coop').slice(0, 10);
-        if (m.quick) { // QUICK MATCH: fullest public room with space, else new room
+        const quick = m.quick === true || m.quick === 1 || m.quick === '1' || m.quick === 'true'; // tolerate numeric/string quick flags from clients
+        if (quick) { // QUICK MATCH: fullest public room with space, else new room
           let best = null;
           state.rooms.forEach(r => { if (r.pub && r.players.size < r.max) { if (m.mode && r.mode !== m.mode) return; if (!best || r.players.size > best.players.size) best = r; } });
           if (best) rname = best.name;
@@ -203,17 +214,17 @@ server.on('upgrade', (req, socket) => {
         } else {
           rname = String(m.room || 'ops').replace(/[^\w-]/g, '').toLowerCase().slice(0, 20) || 'ops';
         }
-        let r = getRoom(rname, map, mode, m.quick ? true : m.pub !== false, m.maxPlayers);
+        let r = getRoom(rname, map, mode, quick ? true : m.pub !== false, m.maxPlayers);
         if (!r) { send({ t: 'err', e: 'Server full — try again later' }); return; }
         if (r.players.size >= r.max) {
-          if (m.quick) { rname = (mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); r = getRoom(rname, map, mode, true, m.maxPlayers); }
+          if (quick) { rname = (mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); r = getRoom(rname, map, mode, true, m.maxPlayers); }
           if (!r || r.players.size >= r.max) { send({ t: 'err', e: 'Room "' + rname + '" is full (' + r.max + ' players)' }); return; }
         }
         pl.room = r; pl.kills = 0; pl.deaths = 0;
         r.players.set(pl.id, pl);
-        send({ t: 'welcome', id: pl.id, room: r.name, map: r.map, mode: r.mode, max: r.max, quick: !!m.quick, players: roomInfo(r).players, lb: topPlayers(10) });
+        send({ t: 'welcome', id: pl.id, room: r.name, map: r.map, mode: r.mode, max: r.max, quick: quick, players: roomInfo(r).players, lb: topPlayers(10) });
         r.players.forEach(p => { if (p !== pl) send2(p, { t: 'pjoin', id: pl.id, name: pl.name }); });
-        console.log('[' + r.name + '] ' + pl.name + ' joined' + (m.quick ? ' (quick match)' : '') + ' (' + r.players.size + '/' + r.max + ')');
+        console.log('[' + r.name + '] ' + pl.name + ' joined' + (quick ? ' (quick match)' : '') + ' (' + r.players.size + '/' + r.max + ')');
       } else if (m.t === 's' && pl.room) {
         pl.state = m; pl.room.dirty = true;
       } else if (m.t === 'ev' && pl.room) {

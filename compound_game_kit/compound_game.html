@@ -63,13 +63,13 @@ button.on{opacity:1;font-weight:600;background:rgba(120,180,140,.18)}
   </div>
   <div id="msubs"></div>
   <button class="mbtn" id="back" style="display:none">← BACK</button>
-  <div id="mnote">WASD move · Shift sprint · Space jump · LMB fire · RMB aim/scope · R reload · G grenade · X pistol · V knife · E drive / boat · 1/2/3/4 squad · Tab switch</div>
+  <div id="mnote">WASD move · Shift sprint · Space jump · LMB fire · RMB aim/scope · R reload · G grenade · E drive / boat · 1/2/3 rifle/pistol/knife · Tab squad</div>
 </div>
 
 <div id="stat"><h2 id="stTitle"></h2><p id="stText"></p><button class="mbtn" id="stBtn" style="width:220px">CONTINUE</button></div>
 
 <div class="p" id="info" style="display:none"><b id="infoT">Compound Ops</b><br><span id="infoB"></span></div>
-<div class="p" id="sw" style="display:none"><button id="b0" class="on">1 · Ranger</button><button id="b1">2 · Vega</button><button id="b2">3 · Dash</button><button id="b3">4 · Hawkeye</button></div>
+<div class="p" id="sw" style="display:none"><button id="b0" class="on">1 · M4 RIFLE</button><button id="b1">2 · M9 PISTOL</button><button id="b2">3 · KNIFE</button></div>
 <div class="p" id="mm" style="display:none"><canvas id="m" width="260" height="128"></canvas></div>
 <div class="p" id="hud" style="display:none">❤ <b id="hp">100</b> &nbsp;<b id="wn">M4 RIFLE</b> ⌖ <b id="am">30</b>/<span id="rs">90</span> &nbsp;💣 <b id="gr">3</b> &nbsp;☠ <b id="kl">0</b><span id="msg" style="display:none"> · Down — respawning</span></div>
 <div class="p" id="obj" style="display:none"></div>
@@ -78,7 +78,7 @@ button.on{opacity:1;font-weight:600;background:rgba(120,180,140,.18)}
 <div id="xh" style="display:none"></div><div id="hs">HEADSHOT</div><div id="scope"></div><div id="hurt"></div><div id="vig"></div><div id="pr"></div><div id="note"></div>
 <div id="stb"><div id="stf"></div></div>
 <div class="p" id="lb" style="display:none;left:10px;top:calc(120px + env(safe-area-inset-top,0px));font-size:11px;line-height:1.6"></div>
-<div class="p" id="ctl" style="display:none"><button id="fb">FIRE</button><button id="jb">JUMP</button><button id="ab">ADS</button><button id="gn">GRN</button><button id="rb">R</button><button id="wb" style="font-size:11px">WPN</button></div>
+<div class="p" id="ctl" style="display:none"><button id="fb">FIRE</button><button id="jb">JUMP</button><button id="ab">ADS</button><button id="gn">GRN</button><button id="rb">R</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -1894,7 +1894,7 @@ function lanStart(role){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim(
  if($('mapKillhouse')&&mapName!=='killhouse'&&mapName!=='compound')mapName='compound';
  const a=$('inAddr')?$('inAddr').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';lanAddr=a;
  const base=a?(location.protocol==='https:'?'https://':'http://')+a:'';
- $('lanHint').textContent='Connecting to "'+lanRoom+'" @ '+(a||location.host||'local server')+'…';
+ const hint=$('lanHint');if(hint)hint.textContent='Connecting to "'+lanRoom+'" @ '+(a||location.host||'local server')+'…';
  fetch(base+'/ping').then(r=>{if(!r.ok)throw 0;return r.text()}).then(()=>startGame(MODES.LAN,mapName))
  .catch(()=>{$('lanHint').textContent='No server at '+(a||location.host||'this machine')+'. Run node lan_server.js on the host PC, allow it through the firewall, then enter its IP:port above'})}
 function startCampaign(i){mission=i;startGame(MODES.CAMPAIGN,CAMPAIGN[i].map)}
@@ -1913,6 +1913,9 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  act=0;pick(0); H.hp=100;H.gr=map==='killhouse'?4:3;H.kl=0;H.msg=0;H.st=100;drive=null;missionState=0;if(map==='camp')H.gr=12; // training stock for station 3
  ['menu','xh','kf','obj'].forEach(id=>$(id).style.display=id==='menu'?'none':id==='xh'?'block':'block');
  $('menu').style.display='none';['info','sw','mm','hud','ctl','cmp'].forEach(id=>$(id).style.display=id==='sw'?'flex':'block');
+ /* desktop: hide touch buttons (FIRE/JUMP/…) + weapon bar for a clean CoD-style HUD; mobile keeps them */
+ const isTouch=('ontouchstart'in window)||(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0);
+ if(!isTouch){$('ctl').style.display='none';$('sw').style.display='none'}
  $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':'Blackout — Port';
  $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':'Open warfare zone — clear hostiles, grab a car (E)';
  if(mode===MODES.CAMPAIGN){const ms=CAMPAIGN[mission];note(ms.title+' — '+ms.brief,6);missionState=ms.setup();if(mission!==0)riverGuard(C[act])}
@@ -1945,7 +1948,8 @@ function showMenu(){running=false;mode=MODES.MENU;$('menu').style.display='flex'
 /* ============================================================ INPUT */
 const K={};let stick=null,drag=null;
 addEventListener('keydown',e=>{K[e.code]=1;if(e.code==='Space')e.preventDefault();
- if(e.code==='Digit1')pick(0);if(e.code==='Digit2')pick(1);if(e.code==='Digit3')pick(2);if(e.code==='Digit4')pick(3);if(e.code==='Tab'){e.preventDefault();pick((act+1)%4)}
+ if(e.code==='Digit1'||e.code==='Numpad1')switchW('rifle');if(e.code==='Digit2'||e.code==='Numpad2')switchW('pistol');if(e.code==='Digit3'||e.code==='Numpad3')switchW('knife');
+ if(e.code==='Digit4'||e.code==='Numpad4')pick(0);if(e.code==='Digit5'||e.code==='Numpad5')pick(1);if(e.code==='Digit6'||e.code==='Numpad6')pick(2);if(e.code==='Digit7'||e.code==='Numpad7')pick(3);if(e.code==='Tab'){e.preventDefault();pick((act+1)%4)}
  if(e.code==='KeyE')tryCar();if(e.code==='KeyG')throwGrenade();
  if(e.code==='KeyX')switchW(curW==='pistol'?'rifle':'pistol');if(e.code==='KeyV')switchW(curW==='knife'?'rifle':'knife');
  if(e.code==='KeyT'&&mode===MODES.LAN&&running){e.preventDefault();chatPrompt()}});
@@ -1965,9 +1969,9 @@ addEventListener('wheel',e=>dist=cl(dist+e.deltaY*.02,5,40),{passive:true});
 jb.onpointerdown=()=>H.jumpReq=1;ab.onpointerdown=()=>H.ads=1;ab.onpointerup=ab.onpointerleave=ab.onpointercancel=()=>H.ads=0;
 gn.onpointerdown=()=>throwGrenade();
 fb.onpointerdown=()=>fb.on=1;rb.onpointerdown=()=>rb.on=1;[fb,rb].forEach(b=>b.onpointerup=b.onpointerleave=b.onpointercancel=()=>b.on=0);
-wb.onpointerdown=()=>switchW(curW==='rifle'?'pistol':curW==='pistol'?'knife':'rifle');
+wb.onpointerdown=()=>{};/* removed — use keys 1/2/3 to switch weapons */
 function pick(i){act=i;if(!C.length)return;if(CHARS[i].gun==='sr')wstate.rifle.rs=Math.max(wstate.rifle.rs,150);[b0,b1,b2,b3].forEach((b,k)=>{if(b)b.className=k===i?'on':''})}
-b0.onclick=()=>pick(0);b1.onclick=()=>pick(1);b2.onclick=()=>pick(2);b3.onclick=()=>pick(3);
+/* weapon switching = keys 1/2/3; legacy WPN button handler removed below */
 /* ============================================================ MINIMAP */
 const mcx=m.getContext('2d'),mx=x=>(x-XB0)/(XB1-XB0)*260,mz=z=>(z-ZB0)/(ZB1-ZB0)*128;
 function mini(){mcx.fillStyle=mapName==='compound'?'#101814':mapName==='killhouse'?'#0d0f12':'#10181f';mcx.fillRect(0,0,260,128);
