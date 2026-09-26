@@ -1,0 +1,16 @@
+# Render.com blueprint — Compound Ops online backend (game server + static hosting).
+# Deploy: Render dashboard → New → Blueprint → pick this repo → Apply.
+# Or CLI:  render blueprint launch
+services:
+  - type: web
+    name: compound-ops
+    runtime: node
+    plan: free                      # free tier sleeps after ~15 min idle; paid plans stay warm
+    rootDir: compound_game_kit      # everything lives in the kit folder
+    buildCommand: echo "no dependencies — game_server.js is dependency-free Node 16+"
+    startCommand: node game_server.js   # respects the PORT env var Render injects
+    healthCheckPath: /api/health    # -> {"ok":true,...}
+    autoDeploy: true                # redeploy on every push to main
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
