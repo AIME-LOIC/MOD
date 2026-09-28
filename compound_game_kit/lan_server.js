@@ -64,8 +64,8 @@ function decodeFrames(buf, onMsg, onLeft) {
     if (maskKey) { payload = Buffer.from(payload); for (let i = 0; i < payload.length; i++) payload[i] ^= maskKey[i & 3]; }
     off += hdr + len;
     if (op === 8) { onMsg(null); return; } // close
+    if (op === 10) { onMsg('__pong__'); continue; } // browser pong → liveness (background tabs throttle rAF)
     if (op === 1 || op === 2) onMsg(payload.toString('utf8'));
-    // pings/pongs ignored
   }
   onLeft(buf.slice(off));
 }
@@ -86,6 +86,7 @@ server.on('upgrade', (req, socket) => {
     if (buf.length > 1 << 20) { buf = Buffer.alloc(0); return; }
     decodeFrames(buf, msg => {
       if (msg === null) { cleanup(); return; }
+      if (msg === '__pong__') { player.lastSeen = Date.now(); return; }
       let m; try { m = JSON.parse(msg); } catch (e) { return; }
       player.lastSeen = Date.now();
       if (m.t === 'join') {
@@ -115,7 +116,7 @@ server.on('upgrade', (req, socket) => {
     try { socket.write(encodeFrame(Buffer.alloc(0), 9)); } // ping; a dead socket throws on write
     catch (e) { cleanup(); }
   }, 5000);
-  const iv = setInterval(() => { if (Date.now() - player.lastSeen > 10000) cleanup(); }, 3000);
+  const iv = setInterval(() => { if (Date.now() - player.lastSeen > 30000) cleanup(); }, 5000); // pongs keep background-tab players alive
   function cleanup() {
     if (!alive) return; alive = false;
     clearInterval(pingIv); clearInterval(iv);

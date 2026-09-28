@@ -84,7 +84,7 @@ THREE={Vector3:_V3,Quaternion:class{constructor(){}copy(){return this}invert(){r
  SpriteMaterial:class{constructor(o){Object.assign(this,o||{});this.color={setHex(){}};this.opacity=0}}, Sprite:class{constructor(m){this.material=m;this.position=new _V3();this.visible=true;this.scale={x:1,y:1,z:1,set(){},setScalar(){},multiplyScalar(){return this}}}},
  DirectionalLight:class{constructor(){this.position=new _V3();this.target={position:new _V3()};this.intensity=0;this.castShadow=false;this.shadow={mapSize:{set(){}},camera:{}}}},
  HemisphereLight:class{constructor(){this.intensity=0}},AmbientLight:class{constructor(){this.intensity=0}},
- Fog:class{},BufferGeometry:class{constructor(){this.attributes={}}setAttribute(){return this}setIndex(){return this}computeBoundingSphere(){}},
+ Fog:class{},BufferGeometry:class{constructor(){this.attributes={}}setAttribute(){return this}setIndex(){return this}computeBoundingSphere(){}computeVertexNormals(){}},
  BufferAttribute:class{constructor(a,s){this.array=a;this.itemSize=s}},Float32BufferAttribute:class{constructor(a,s){this.array=a;this.itemSize=s}},
  BackSide:1,PCFSoftShadowMap:1,sRGBEncoding:1,ACESFilmicToneMapping:1,DoubleSide:2};
 function canvasEl(){return {}}`;
@@ -97,8 +97,8 @@ let failed = 0;
 function check(name, cond, extra) { if (cond) console.log('PASS:', name, extra !== undefined ? '(' + extra + ')' : ''); else { console.log('FAIL:', name, extra !== undefined ? '(' + extra + ')' : ''); failed++ } }
 
 try {
-  // start single play
-  els.btnSingle.onclick(); stepFrames(20);
+  // start single play (menu now shows a map picker, so tests start the game directly)
+  vm.runInContext('startGame(MODES.SINGLE,"compound")', vmc); stepFrames(20);
   check('game started', vm.runInContext('running', vmc));
 
   // ---- 1. enter a house through its front door (W1_North: door at x=54.15, front wall z=34.8 faces south)
@@ -112,8 +112,14 @@ try {
 
   // ---- 2. climb the interior stairs to the roof of W1_North (stairs at x=35.6..36.9, from z=34.35 going north/-z)
   vm.runInContext(`C[act].x=36.2;C[act].z=33.6;C[act].y=0;C[act].vy=0;C[act].ground=1;yaw=0;lp=0`, vmc); // stand on first step, face north (stairs rise toward -z)
-  fire('keydown', { code: 'KeyW' }); stepFrames(280); fire('keyup', { code: 'KeyW' });
-  const roofY = vm.runInContext('C[act].y', vmc);
+  // walk in short bursts, stopping as soon as roof height is reached (walking on would drop into the stairwell slot)
+  let roofY = 0;
+  for (let b = 0; b < 40; b++) {
+    fire('keydown', { code: 'KeyW' }); stepFrames(8); fire('keyup', { code: 'KeyW' });
+    roofY = vm.runInContext('C[act].y', vmc);
+    if (roofY > 3.0) break;
+  }
+  fire('keyup', { code: 'KeyW' });
   check('climb interior stairs to the roof', roofY > 3.0, 'y=' + roofY.toFixed(2) + ' (roof at ~3.65)');
 
   // ---- 3. dead enemies stay dead
@@ -289,10 +295,12 @@ try {
   check('stadium south side is collapsed rubble (low piles)', south);
   const stSn = vm.runInContext('bots.filter(b=>b.sniper&&Math.hypot(b.x-246,b.z+248)<40).length', vmc);
   check('stadium has a rooftop sniper', stSn >= 1, stSn + ' sniper');
-  vm.runInContext('C[act].x=246;C[act].z=-244;C[act].y=support(246,-244,0);yaw=0', vmc);
+  // find a clear approach column (props shift with the shared RNG stream)
+  const clearX = vm.runInContext(`(function(){for(let x=232;x<260;x+=1){if(!blocked(x,-244,0,.5)&&!blocked(x,-245.5,0,.5)&&!blocked(x,-247,0,.5)&&support(x,-244,0)>=0)return x}return 246})()`, vmc);
+  vm.runInContext(`C[act].x=${clearX};C[act].z=-244;C[act].y=support(${clearX},-244,0);C[act].vy=0;C[act].ground=1;yaw=0;lp=0`, vmc);
   fire('keydown', { code: 'KeyW' }); stepFrames(30); fire('keyup', { code: 'KeyW' });
   const pz3 = vm.runInContext('C[act].z', vmc);
-  check('player can run onto the pitch', pz3 < -244.5, 'z=' + pz3.toFixed(1));
+  check('player can run onto the pitch', pz3 < -244.5, 'z=' + pz3.toFixed(1) + ' from x=' + clearX);
 
   console.log(failed === 0 ? 'PHYSICS TEST PASSED' : 'PHYSICS TEST FAILED: ' + failed + ' failures');
   process.exit(failed === 0 ? 0 : 1);

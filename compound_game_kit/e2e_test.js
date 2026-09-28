@@ -67,7 +67,12 @@ function wsClient(name, room) {
   const srv = spawn('node', ['lan_server.js', String(PORT)], { cwd: __dirname.replace(/\/tests?$/, ''), stdio: 'pipe' });
   srv.stdout.on('data', d => process.stdout.write('[srv] ' + d));
   srv.stderr.on('data', d => process.stdout.write('[srv-err] ' + d));
-  await new Promise(r => setTimeout(r, 700));
+  await new Promise(async (done) => { // poll until the port answers (700 ms is too tight on a loaded machine)
+    for (let i = 0; i < 40; i++) {
+      try { const s = require('net').connect(PORT, '127.0.0.1'); await new Promise((ok, bad) => { s.on('connect', ok); s.on('error', bad); }); s.destroy(); break; } catch (e) { await new Promise(r => setTimeout(r, 250)); }
+    }
+    done();
+  });
   try {
     const page = await get('/compound_game.html');
     console.log('OK: GET /compound_game.html ->', page.status, page.bytes, 'bytes');

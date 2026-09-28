@@ -63,13 +63,13 @@ button.on{opacity:1;font-weight:600;background:rgba(120,180,140,.18)}
   </div>
   <div id="msubs"></div>
   <button class="mbtn" id="back" style="display:none">← BACK</button>
-  <div id="mnote">WASD move · Shift sprint · Space jump · LMB fire · RMB aim/scope · R reload · G grenade · E drive / boat · 1/2/3 rifle/pistol/knife · Tab squad</div>
+  <div id="mnote">WASD move · Shift sprint · Space jump · LMB fire · RMB aim/scope · R reload · G grenade · E drive / boat · 1/2/3 rifle/pistol/knife · 4 SNIPER (Hawkeye) · Tab squad</div>
 </div>
 
 <div id="stat"><h2 id="stTitle"></h2><p id="stText"></p><button class="mbtn" id="stBtn" style="width:220px">CONTINUE</button></div>
 
 <div class="p" id="info" style="display:none"><b id="infoT">Compound Ops</b><br><span id="infoB"></span></div>
-<div class="p" id="sw" style="display:none"><button id="b0" class="on">1 · M4 RIFLE</button><button id="b1">2 · M9 PISTOL</button><button id="b2">3 · KNIFE</button></div>
+<div class="p" id="sw" style="display:none"><button id="b0" class="on">1 · M4 RIFLE</button><button id="b1">2 · M9 PISTOL</button><button id="b2">3 · KNIFE</button><button id="b3" style="border-color:#c9b46a">4 · SNIPER</button></div>
 <div class="p" id="mm" style="display:none"><canvas id="m" width="260" height="128"></canvas></div>
 <div class="p" id="hud" style="display:none">❤ <b id="hp">100</b> &nbsp;<b id="wn">M4 RIFLE</b> ⌖ <b id="am">30</b>/<span id="rs">90</span> &nbsp;💣 <b id="gr">3</b> &nbsp;☠ <b id="kl">0</b><span id="msg" style="display:none"> · Down — respawning</span></div>
 <div class="p" id="obj" style="display:none"></div>
@@ -104,7 +104,7 @@ const cam=new THREE.PerspectiveCamera(75,1,.05,1600);
 const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85},o||{}));
 function box(w,h,d,mat,x,y,z,p){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=m.receiveShadow=!LOD;(p||S).add(m);return m}
 /* collision: col = solid boxes [x0,x1,z0,z1,topY]; tops = standable-only (ground/roofs) */
-const col=[],tops=[],ladders=[];
+const col=[],tops=[],ladders=[];let REAL_BL=[];/* realcity baked blocks for the minimap */
 function ladder(x,z,y0,y1){ladders.push({x,z,y0,y1})}
 const stepUp=.56;
 /* spatial hash so 25k+ colliders stay fast: local queries only */
@@ -268,35 +268,9 @@ function clearWorld(){if(worldGroup)S.remove(worldGroup);worldGroup=new THREE.Gr
  col.length=0;tops.length=0;ladders.length=0;colGrid=null;topsGrid=null;cars=[];roofs=[];lights=[];fires.length=0;fireL=null;targs.length=0;
  smokes.forEach(p=>{p.free=1;p.s.visible=false;p.m.opacity=0});smokes.length=0;planes.length=0}
 function building(x0,x1,z0,z1,h,c,nm,withLight){
- const w=x1-x0,d=z1-z0,cx_=x0+w/2,cz=z0+d/2,pm=M(c),h1=h/3.5,P=worldGroup;
- const seg=(a0,a1,b0,b1,plain,y0,y1)=>{y0=y0||0;y1=y1||h;const L=Math.max(a1-a0,b1-b0);
-  const m=plain?pm:M(c,{map:ft(L,h1*(y1-y0)/h)});box(a1-a0,y1-y0,b1-b0,m,(a0+a1)/2,(y0+y1)/2,(b0+b1)/2,P).name=nm+'_wall'};
- const wl=(a0,a1,b0,b1,plain)=>{if(a1-a0<.05||b1-b0<.05)return;seg(a0,a1,b0,b1,plain);col.push([a0,a1,b0,b1,h])};
- const zw=(zA,zB,doors)=>{let a=x0+T_;doors.forEach(dc=>{wl(a,dc-1.2,zA,zB);seg(dc-1.2,dc+1.2,zA,zB,0,3,h);a=dc+1.2});wl(a,x1-T_,zA,zB)};
- const s=cz<D/2?1:-1,zF=s>0?[z1-T_,z1]:[z0,z0+T_],zB=s>0?[z0,z0+T_]:[z1-T_,z1],back=w>=30&&z0>2&&z1<D-2?[cx_-w*.25]:[];
- zw(zF[0],zF[1],[cx_]);zw(zB[0],zB[1],back);wl(x0,x0+T_,z0,z1);wl(x1-T_,x1,z0,z1);
- const pt=Math.min(w,d)>=12&&Math.max(w,d)>=26;
- if(pt){if(w>=d){const xm=x0+w*.36,zd=z0+d*.35;wl(xm-.15,xm+.15,z0+T_,zd-1.1,1);wl(xm-.15,xm+.15,zd+1.1,z1-T_,1)}
-  else{const zm=z0+d*.5,xd=x0+w*.6;wl(x0+T_,xd-1.1,zm-.15,zm+.15,1);wl(xd+1.1,x1-T_,zm-.15,zm+.15,1)}}
- box(w-2*T_,.04,d-2*T_,FL,cx_,.04,cz,P);
- const n=Math.ceil((h-.15)/.28),stZ0=s>0?z1-T_-.05:z0+T_+.05,stD=s>0?-.3:.3,sx0=x0+T_,sx1=x0+T_+1.3,topZ=stZ0+stD*n;
- for(let i=0;i<n;i++){const zA=stZ0+stD*i,zB2=stZ0+stD*(i+1),zt=(i+1)*.28;
-  box(sx1-sx0,zt+.05,Math.abs(zB2-zA)+.02,dk,(sx0+sx1)/2,zt/2,(zA+zB2)/2,P);col.push([sx0,sx1,Math.min(zA,zB2),Math.max(zA,zB2),zt])}
- const rx0=Math.max(x0-.2,0),rx1=Math.min(x1+.2,W),rz0=Math.max(z0-.2,0),rz1=Math.min(z1+.2,D);
- const hx0=sx0-.12,hx1=sx1+.12,hz0=Math.min(stZ0,topZ)-.35,hz1=Math.max(stZ0,topZ)+.35,rt=h+.15;
- [[rx0,rx1,rz0,hz0],[rx0,rx1,hz1,rz1],[rx0,hx0,hz0,hz1],[hx1,rx1,hz0,hz1]].forEach(q=>{if(q[1]-q[0]<.05||q[3]-q[2]<.05)return;
-  box(q[1]-q[0],.15,q[3]-q[2],dk,(q[0]+q[1])/2,rt-.075,(q[2]+q[3])/2,P);tops.push([q[0],q[1],q[2],q[3],rt])});
- const pw=(a0,a1,b0,b1)=>{if(a1-a0<.05||b1-b0<.05)return;box(a1-a0,.55,b1-b0,dk,(a0+a1)/2,rt+.275,(b0+b1)/2,P);col.push([a0,a1,b0,b1,rt+.55,rt])};
- pw(rx0,rx1,rz0,rz0+.3);pw(rx0,rx1,rz1-.3,rz1);pw(rx0,rx0+.3,rz0,rz1);pw(rx1-.3,rx1,rz0,rz1);
- box(2.4,.15,.5,lampM,cx_,3.2,(s>0?z1:z0)+s*.3,P);
- box(1,.1,1,lampM,cx_,h-.25,cz,P);
- if(withLight){const L=new THREE.PointLight(0xffd9a0,.55,17,1.6);L.position.set(cx_,h-.7,cz);P.add(L);lights.push(L)}
- const cmm=crateM;
- for(let k=0,count=0;count<Math.max(2,Math.round(w*d/160))&&k<80;k++){const x=x0+3+rnd()*(w-6),z=z0+3+rnd()*(d-6),q=.9+rnd()*.9;
-  if(Math.abs(x-cx_)<3.5&&Math.abs(z-(s>0?z1:z0))<6)continue;
-  if(pt&&(w>=d?Math.abs(x-(x0+w*.36))<2:Math.abs(z-(z0+d*.5))<2))continue;
-  if(x>sx0-1.4&&x<sx1+1.4&&z>Math.min(stZ0,topZ)-1.5&&z<Math.max(stZ0,topZ)+1.5)continue;
-  count++;box(q,q,q,cmm[count%3],x,q/2,z,P);col.push([x-q/2,x+q/2,z-q/2,z+q/2,q])}
+ /* real architecture: window openings, interior floors, dogleg stairs to the roof */
+ cityBuilding(x0,x1,z0,z1,h,c,(h>=7||x1-x0>26)?1:0,0,1);
+ if(withLight&&lights.length<16){const L=new THREE.PointLight(0xffd9a0,.55,17,1.6);L.position.set((x0+x1)/2,h-.7,(z0+z1)/2);worldGroup.add(L);lights.push(L)}
 }
 function gatesWall(list){const wm=M(0x4c5058),P=worldGroup;
  list.forEach(a=>{const zD=a[2]==='S'?D+.25:-.25;box(a[1]-a[0],2.6,.5,wm,(a[0]+a[1])/2,1.3,zD,P);col.push([a[0],a[1],zD-.25,zD+.25,2.6])});
@@ -435,8 +409,8 @@ const ROADSEG=[[95,-330,95,244,6],[-152,58,170,58,5],[20,-240,175,-240,5],[95,-1
 function nearRoad(x0,x1,z0,z1){for(let i=0;i<ROADSEG.length;i++){const s=ROADSEG[i];
  if(x1>s[0]-s[4]&&x0<s[2]+s[4]&&z1>s[1]-s[4]&&z0<s[3]+s[4])return 1}return 0}
 /* ---- WARZONE CITY (south of the river): industrial → downtown → park → residential → waterfront ---- */
-function cityBuilding(x0,x1,z0,z1,h,c,rooms,burn){
- if(nearRoad(x0,x1,z0,z1)||inRiver(x0,z0)||inRiver(x1,z1)||inRiver((x0+x1)/2,(z0+z1)/2))return;
+function cityBuilding(x0,x1,z0,z1,h,c,rooms,burn,force){
+ if(!force&&(nearRoad(x0,x1,z0,z1)||inRiver(x0,z0)||inRiver(x1,z1)||inRiver((x0+x1)/2,(z0+z1)/2)))return;
  window.__bCount=(window.__bCount||0)+1;
  const w=x1-x0,d=z1-z0,cx_=(x0+x1)/2,cz=(z0+z1)/2,pm=BAKE?pmBake(c):M(c,{map:ft(w,h*2)}),P=worldGroup;
  const B=(bw,bh,bd,mat,bx,by,bz)=>{if(BAKE)baker.add(mat,bw,bh,bd,bx,by,bz);else box(bw,bh,bd,mat,bx,by,bz,P)};
@@ -468,7 +442,9 @@ function cityBuilding(x0,x1,z0,z1,h,c,rooms,burn){
  const HX0=LX0-.15,HX1=LX1+.15,HZ0=zBk+LAND-.1,HZ1=zF+.35;
  const lvls=[];{let y=0;while(y<rt-.05){const ny=Math.min(y+FLH,rt);lvls.push([y,ny]);y=ny}}
  lvls.forEach((L2,li)=>{const yA=L2[0],yB=L2[1];
-  const steps=Math.max(2,Math.ceil((yB-yA)/.3)),rise=(yB-yA)/steps,run=Math.min(zF-zBk-LAND,steps*.36),dz2=run/steps;
+  /* rise capped at .27 so two steps (2×.27=.54) stay under the .56 step-up allowance —
+     otherwise the mover's forward probe hits the step 2 ahead and climbing stalls */
+  const steps=Math.max(2,Math.ceil((yB-yA)/.27)),rise=(yB-yA)/steps,run=Math.min(zF-zBk-LAND,steps*.36),dz2=run/steps;
   const dir=li%2?1:-1; // -1: front→back, 1: back→front (dogleg)
   for(let i=0;i<steps;i++){const yy=yA+(i+1)*rise;
    const za=dir<0?zF-(i+1)*dz2:zBk+LAND+i*dz2,zb=za+dz2;
@@ -878,15 +854,38 @@ function trainingCamp(){
   g.position.set(p2[0],0,p2[1]);g.rotation.y=p2[2];worldGroup.add(g);col.push([p2[0]-1.3,p2[0]+1.3,p2[1]-2.5,p2[1]+2.5,1.9])});
  /* TENT LINES — two big squad tents + rows of pup tents + mess tent + guard hut + flag */
  function bigTent(x,z,ry,w,d){const g=new THREE.Group();
-  const cov=new THREE.Mesh(new THREE.BoxGeometry(w,.18,d),M(0x44503c,{roughness:1}));cov.position.y=2.25;cov.rotation.z=.06;cov.castShadow=cov.receiveShadow=true;g.add(cov);
-  [[-w/2+.4,d/2-.3],[w/2-.4,d/2-.3],[-w/2+.4,-d/2+.3],[w/2-.4,-d/2+.3],[0,0]].forEach(o=>{const p3=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,2.3,6),M(0x4c4638,{roughness:.9}));p3.position.set(o[0],1.15,o[1]);g.add(p3)});
-  for(let s2=-1;s2<=1;s2+=2)for(let k=0;k<3;k++){const cot=new THREE.Mesh(new THREE.BoxGeometry(.6,.3,1.7),M(0x5c6156,{roughness:1}));cot.position.set(s2*(w/2-.8),.15,-d/3+k*d/3);g.add(cot)}
+  /* pitched canvas roof: two slanted panels meeting at a ridge pole (no flat box) */
+  const panL=new THREE.Mesh(new THREE.PlaneGeometry(d+1,w*.62),M(0x44503c,{roughness:1,side:THREE.DoubleSide}));
+  panL.rotation.order='YXZ';panL.position.set(-w*.29,2.15,0);panL.rotation.y=Math.PI/2;panL.rotation.z=Math.PI/2-.62;panL.castShadow=panL.receiveShadow=true;g.add(panL);
+  const panR=panL.clone();panR.position.x=w*.29;panR.rotation.z=-(Math.PI/2-.62);panR.castShadow=panR.receiveShadow=true;g.add(panR);
+  /* triangular canvas gables front + back */
+  const gab=(zz)=>{const gm=new THREE.BufferGeometry();gm.setAttribute('position',new THREE.Float32BufferAttribute([
+   -w/2,0,zz, w/2,0,zz, 0,2.42,zz],3));gm.computeVertexNormals();
+   const m=new THREE.Mesh(gm,M(0x4c5842,{roughness:1,side:THREE.DoubleSide}));m.castShadow=true;g.add(m)};
+  gab(d/2-.02);gab(-d/2+.02);
+  /* ridge + corner poles, guy ropes, cots, floor */
+  const ridge=new THREE.Mesh(new THREE.CylinderGeometry(.07,.07,w+1,8),M(0x4c4638,{roughness:.9}));ridge.rotation.z=Math.PI/2;ridge.position.y=2.42;g.add(ridge);
+  [[-w/2+.4,d/2-.3],[w/2-.4,d/2-.3],[-w/2+.4,-d/2+.3],[w/2-.4,-d/2+.3]].forEach(o=>{const p3=new THREE.Mesh(new THREE.CylinderGeometry(.09,.09,2.3,6),M(0x4c4638,{roughness:.9}));p3.position.set(o[0],1.15,o[1]);g.add(p3);
+   const rp=new THREE.Mesh(new THREE.CylinderGeometry(.018,.018,2.1,4),M(0x2a2620,{roughness:1}));rp.position.set(o[0]*1.42,.95,o[1]*1.18);rp.rotation.z=o[0]>0?-.5:.5;g.add(rp)});
+  for(let s2=-1;s2<=1;s2+=2)for(let k=0;k<3;k++){const cot=new THREE.Mesh(new THREE.BoxGeometry(.6,.3,1.7),M(0x5c6156,{roughness:1}));cot.position.set(s2*(w/2-.9),.15,-d/3+k*d/3);g.add(cot);
+   const blk=new THREE.Mesh(new THREE.BoxGeometry(.55,.12,.6),M(0x3c4238,{roughness:1}));blk.position.set(s2*(w/2-.9),.36,-d/3+k*d/3+.45);g.add(blk)}
   const flr=new THREE.Mesh(new THREE.PlaneGeometry(w,d),M(0x57503f,{roughness:1}));flr.rotation.x=-Math.PI/2;flr.position.y=.03;g.add(flr);
   g.position.set(x,0,z);g.rotation.y=ry;worldGroup.add(g);col.push([x-w/2,x+w/2,z-d/2,z+d/2,2.4])}
- function pupTent(x,z,ry){const t3=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,2.8,3),M(0x4a5640,{roughness:1}));
-  t3.rotation.z=Math.PI/2;t3.rotation.y=ry;t3.position.set(x,.85,z);t3.castShadow=t3.receiveShadow=true;worldGroup.add(t3);
-  col.push([x-1.3,x+1.3,z-1.3,z+1.3,1.7]);
-  const cot=new THREE.Mesh(new THREE.BoxGeometry(.5,.25,1.4),M(0x5c6156,{roughness:1}));cot.position.set(x,.13,z);cot.rotation.y=ry;worldGroup.add(cot)}
+ /* ridge pup tent: leaning canvas panels, back gable, door flap, guy ropes, bedroll */
+ function pupTent(x,z,ry){const g=new THREE.Group();
+  const cw=new THREE.PlaneGeometry(2.9,1.75);
+  const pL=new THREE.Mesh(cw,M(0x4a5640,{roughness:1,side:THREE.DoubleSide}));pL.rotation.order='YXZ';
+  pL.position.set(-.78,.82,0);pL.rotation.y=Math.PI/2;pL.rotation.z=Math.PI/2-.68;pL.castShadow=pL.receiveShadow=true;g.add(pL);
+  const pR=pL.clone();pR.position.x=.78;pR.rotation.z=-(Math.PI/2-.68);g.add(pR);
+  const bk=new THREE.BufferGeometry();bk.setAttribute('position',new THREE.Float32BufferAttribute([
+   -.82,.06,-1.32, .82,.06,-1.32, 0,1.6,-1.32],3));bk.computeVertexNormals();
+  const bke=new THREE.Mesh(bk,M(0x41503a,{roughness:1,side:THREE.DoubleSide}));bke.castShadow=true;g.add(bke);
+  const ridge=new THREE.Mesh(new THREE.CylinderGeometry(.045,.045,3,6),M(0x4c4638,{roughness:.9}));ridge.rotation.z=Math.PI/2;ridge.position.y=1.6;g.add(ridge);
+  [[-1.45],[1.45]].forEach(o=>{const pole=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1.6,6),M(0x4c4638,{roughness:.9}));pole.position.set(o[0]*.82,.8,0);g.add(pole);
+   const rp=new THREE.Mesh(new THREE.CylinderGeometry(.015,.015,1.6,4),M(0x2a2620,{roughness:1}));rp.position.set(o[0]*1.45,.7,0);rp.rotation.z=o[0]>0?-.55:.55;g.add(rp)});
+  const bed=new THREE.Mesh(new THREE.BoxGeometry(.62,.16,1.8),M(0x5c6156,{roughness:1}));bed.position.set(.1,.09,.15);g.add(bed);
+  g.position.set(x,0,z);g.rotation.y=ry;worldGroup.add(g);
+  col.push([x-1.35,x+1.35,z-1.35,z+1.35,1.6])}
  bigTent(112,34,0,7,9);bigTent(124,34,0,7,9);bigTent(168,34,-.1,8,10); // squad + mess tents (north strip)
  [[148,36],[151.5,36],[155,36],[158.5,36],[148,40],[151.5,40],[155,40],[158.5,40]].forEach(p2=>pupTent(p2[0],p2[1],Math.PI/2));
  /* clothes lines between tents */
@@ -1186,21 +1185,32 @@ function buildKillhouse(){
  const cx0=W/2-KH_W/2,cz0=D/2+18-KH_D/2; // hall min corner (world coords)
  const wallBox=(x0,z0,x1,z1,h,y0,m)=>{const w=x1-x0,d=z1-z0;if(w<=0||d<=0)return;
   box(w,h,d,m||wallM,(x0+x1)/2,(y0||0)+h/2,(z0+z1)/2,worldGroup);col.push([x0,x1,z0,z1,(y0||0)+h,y0||0])};
- /* outer shell */
- wallBox(cx0,cz0,cx0+KH_W,cz0+.6,KH_H);wallBox(cx0,cz0+KH_D-.6,cx0+KH_W,cz0+KH_D,KH_H);
- wallBox(cx0,cz0,cx0+.6,cz0+KH_D,KH_H);wallBox(cx0+KH_W-.6,cz0,cx0+KH_W,cz0+KH_D,KH_H);
+ /* outer shell with REAL window openings (glass panes, vaultable sills) — daylight + sightlines */
+ const khWinWall=(x0,z0,x1,z1)=>{
+  const horiz=(x1-x0)>=(z1-z0),U0=horiz?x0:z0,U1=horiz?x1:z1;
+  const oc=horiz?[z0,z1]:[x0,x1],ocm=(oc[0]+oc[1])/2;
+  const seg=(u0,u1,y0,y1)=>{if(u1-u0<.06||y1-y0<.06)return;horiz?wallBox(u0,oc[0],u1,oc[1],y1-y0,y0):wallBox(oc[0],u0,oc[1],u1,y1-y0,y0)};
+  let cur=U0;const stride=Math.max(5.2,(U1-U0)/Math.max(1,Math.round((U1-U0)/7)));
+  for(let u=U0+2.4;u<U1-2.6;u+=stride){const wu1=Math.min(u+2.6,U1-1.4),wy0=.95,wy1=2.95;
+   seg(cur,u,0,KH_H);seg(u,wu1,wy1,KH_H);seg(u,wu1,0,wy0);
+   if(!LOD){const gm=new THREE.Mesh(new THREE.BoxGeometry(horiz?wu1-u:.1,wy1-wy0,horiz?.1:wu1-u),winM);
+    gm.position.set(horiz?(u+wu1)/2:ocm,(wy0+wy1)/2,horiz?ocm:(u+wu1)/2);worldGroup.add(gm)}
+   cur=wu1}
+  if(cur<U1)seg(cur,U1,0,KH_H)};
+ khWinWall(cx0,cz0,cx0+KH_W,cz0+.6);khWinWall(cx0,cz0+KH_D-.6,cx0+KH_W,cz0+KH_D);
+ khWinWall(cx0,cz0,cx0+.6,cz0+KH_D);khWinWall(cx0+KH_W-.6,cz0,cx0+KH_W,cz0+KH_D);
  /* ---- ROOM GRID: 10 x 4 cells with door gaps (like the photo) ---- */
  const CW=19.4,CD=26.5,gap=1.6,T=.35,rows=[cz0+.6],cols=[cx0+.6];
  for(let i=0;i<10;i++)cols.push(cols[i]+CW);for(let j=0;j<4;j++)rows.push(rows[j]+CD);
  /* shared N-S partitions with door gaps (skip doors every other cell for streets) */
  const px0=cols[4],px1=cols[6]; // central spawn plaza span
  for(let i=1;i<10;i++){const x=cols[i];
-  for(let j=0;j<4;j++){const zA=rows[j]+.35,zB=rows[j+1]-.35,mid=(zA+zB)/2,skip=(j===1||j===2)&&(i%3===1);
-   if(skip||(j===1||j===2)&&(x>px0-2.5&&x<px1+2.5))continue; // open lane / spawn plaza
+  for(let j=0;j<4;j++){const zA=rows[j]+.35,zB=rows[j+1]-.35,mid=(zA+zB)/2,skip=(j===1||j===2)&&(i%3===1);   if(skip||(j===1||j===2)&&(x>px0-2.5&&x<px1+2.5))continue; // open lane / spawn plaza
    const half=(zB-zA)/2,dw=gap*(1+(rnd()<.35?1:0));
    wallBox(x-T,zA,x+T,mid-dw/2,3.6,0,i%2?wall2:wallM);wallBox(x-T,mid+dw/2,x+T,zB,3.6,0,i%2?wall2:wallM);
-   if(rnd()<.4)wallBox(x-T,mid-dw/2,x+T,mid+dw/2,3.6,.9,wallM); // sometimes a window sill you can vault
- }}
+   wallBox(x-T,mid-dw/2,x+T,mid+dw/2,1.5,2.2,i%2?wall2:wallM); // lintel: real door-height opening
+   if(rnd()<.4)wallBox(x-T,mid-dw/2,x+T,mid+dw/2,.9,0,wallM); // sometimes a window sill you can vault
+  }}
  /* shared E-W partitions with door gaps */
  for(let j=1;j<4;j++){const z=rows[j];
   for(let i=0;i<10;i++){const xA=cols[i]+.35,xB=cols[i+1]-.35,mid=(xA+xB)/2;
@@ -1208,6 +1218,7 @@ function buildKillhouse(){
    if(i%3===2){wallBox(xA,z-T,xB,z+T,3.6,0,wall2);continue} // solid corridor walls
    const half=(xB-xA)/2,dw=gap*(1+(rnd()<.35?1:0));
    wallBox(xA,z-T,mid-dw/2,z+T,3.6,0,wallM);wallBox(mid+dw/2,xB,z-T,z+T,3.6,0,wallM);
+   wallBox(mid-dw/2,mid+dw/2,z-T,z+T,1.5,2.2,wallM); // lintel above the doorway
    if(rnd()<.4)wallBox(mid-dw/2,mid+dw/2,z-T,z+T,3.6,.9,wallM)}}
  /* ---- CENTRAL SPAWN PLAZA (the open lanes of the photo) ---- */
  box(6.4,.12,6.4,redM,W/2,.07,D/2+18,worldGroup);
@@ -1286,6 +1297,131 @@ const BCity=[[64,86,158,184,3.5,0x7d8288,'R1'],[98,122,158,184,4.5,0x8a7f74,'R2'
 const BOutsk=[[20,52,30,56,3.5,0x8a8272,'F1'],[60,96,20,52,7,0x7d8578,'Barn'],[130,164,28,60,3.5,0x76808a,'S1'],
 [170,196,100,130,4.5,0x8a7f74,'S2'],[24,54,150,178,3.5,0x7d8288,'F2'],[120,150,150,180,6,0x7a8474,'Silos'],
 [180,210,180,210,3.5,0x767d86,'S3']];
+/* ============ REALCITY: real-world-data city built from warzone_city.glb (Blender export) ============ */
+/* fallback city: real street grid + real buildings (windows, interiors, stairs) — used if the glb can't load */
+function realCityFallback(){
+ for(let gx=-3;gx<=3;gx++)for(let gz=-4;gz<=3;gz++){
+  const cx2=gx*36,cz2=gz*36-60;
+  if(Math.hypot(cx2,cz2-30)<24)continue; // spawn plaza clear
+  const w=RR(14,22),d=RR(14,22),h=RR(5,15);
+  cityBuilding(cx2-w/2,cx2+w/2,cz2-d/2,cz2+d/2,h,[0x6a655c,0x5d6154,0x705f4e][Math.abs(gx*3+gz)%3],h>9?1:0,0,1)}
+ lamps([[-36,-24],[36,-24],[-36,48],[36,48],[0,-60],[0,12],[72,12],[-72,12]]);
+ makeCar(8,-20,0,0x4a5a3a);makeCar(-12,20,Math.PI/2,0x37475a);makeCar(30,48,Math.PI,0x555a48);
+ ammoCrate(6,-10,'');ammoCrate(-8,6,'');burningCar(-24,-16,0.4);rubble(18,-8,1.8);
+ const warL=new THREE.PointLight(0xff8a3a,.7,46,1.7);warL.position.set(0,6,0);worldGroup.add(warL);lights.push(warL);
+ gridBuild();
+}
+function buildRealCity(){
+ /* REALCITY = the REAL-WORLD-DATA city mesh (warzone_city.glb — Blender export)
+    PLUS procedurally-built real houses (cityBuilding: window openings, interiors,
+    dogleg stairs to the roof) placed in the gaps between the surveyed blocks. */
+ const gname='warzone_city.glb';let buf=null;
+ try{const req=new XMLHttpRequest();req.open('GET',gname,false);req.responseType='arraybuffer';req.send();
+  if((req.status===200||req.status===0)&&req.response&&req.response.byteLength>28)buf=new Uint8Array(req.response)}catch(e){}
+ if(!buf){realCityFallback();note('REALCITY — survey mesh not found, built the procedural city instead',4);return}
+ let gltf=null,bin=null;
+ try{
+  const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+ let off=12,gltf=null,bin=null;
+ while(off+8<=buf.byteLength){const len=dv.getUint32(off,true),typ=dv.getUint32(off+4,true);off+=8;
+  if(typ===0x4E4F534A)gltf=JSON.parse(new TextDecoder().decode(new Uint8Array(buf.buffer,buf.byteOffset+off,len)));
+  else if(typ===0x004E4942)bin=new Uint8Array(buf.buffer,buf.byteOffset+off,len);
+  off+=len}
+ }catch(e){realCityFallback();return}
+ if(!gltf||!bin){realCityFallback();return}
+ const access=(i,ncomp)=>{const a=gltf.accessors[i],bv=gltf.bufferViews[a.bufferView||0];
+  const comp={5126:Float32Array,5123:Uint16Array,5125:Uint32Array,5121:Uint8Array,5122:Int16Array}[a.componentType];
+  const ncomp2={5126:4,5123:2,5125:4,5121:1,5122:2}[a.componentType];
+  const nper={SCALAR:1,VEC2:2,VEC3:3,VEC4:4}[a.type];
+  return new comp(bin.buffer,bin.byteOffset+(bv.byteOffset||0)+(a.byteOffset||0),a.count*nper*ncomp2)};
+ /* category materials — the glb carries no textures, so we dress it by mesh-name prefix */
+ const mats={
+  terrain:M(0x4a4f3a,{roughness:1}),road:M(0x35373b,{roughness:.92}),sidewalk:M(0x55575c,{roughness:.95}),
+  park:M(0x33502c,{roughness:1}),water:M(0x0d1c26,{roughness:.15,metalness:.6}),waterfront:M(0x4c4a42,{roughness:.95}),
+  pier:M(0x5c4a34,{roughness:.9}),building:M(0x585c60,{roughness:.85}),rubble:M(0x4e4a44,{roughness:1}),
+  vehicle:M(0x465054,{roughness:.5,metalness:.35}),burning_area:M(0x2a2018,{roughness:1,emissive:0xff5a1a,emissiveIntensity:.25}),
+  destroyed_landmark:M(0x615c52,{roughness:.95}),fallback:M(0x5a5a52,{roughness:.9})};
+ const matFor=n=>{const s=(n||'').toLowerCase();
+  for(const k in mats)if(s.indexOf(k)===0)return mats[k];
+  if(s.indexOf('pier')===0)return mats.pier;
+  return mats.fallback};
+ const flat=v=>new THREE.BufferGeometry();
+ let nB=0,nR=0,nV=0,nRoad=0,nRb=0;
+ gltf.nodes.forEach(n=>{
+  if(n.mesh===undefined)return;
+  const mesh=gltf.meshes[n.mesh];if(!mesh)return;
+  const posAccs=[],idxAccs=[];
+  mesh.primitives.forEach(pr=>{posAccs.push(pr.attributes.POSITION);if(pr.indices!==undefined)idxAccs.push(pr.indices)});
+  if(!posAccs.length)return;
+  /* merge primitives of this node into one world-space geometry */
+  let vc=0,ic=0;const pv=[];
+  posAccs.forEach((ai,k)=>{const p=access(ai);pv.push({p,idx:idxAccs[k]});vc+=p.length/3;if(idxAccs[k])ic+=gltf.accessors[idxAccs[k]].count});
+  const P=new Float32Array(vc*3),I=new Uint32Array(ic);let vo=0,io=0;
+  pv.forEach(o=>{P.set(o.p,vo*3);
+   if(o.idx){const ix=o.idx;for(let i=0;i<ix.length;i++)I[io+i]=ix[i]+vo;io+=ix.length}
+   else{for(let i=0;i<o.p.length/3;i++)I[io+i]=vo+i;io+=o.p.length/3}
+   vo+=o.p.length/3});
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(P,3));
+  geo.setIndex(new THREE.BufferAttribute(I,1));geo.computeVertexNormals();
+  const nm=(n.name||'').toLowerCase();
+  /* world AABB from positions (transforms are identity in this export) */
+  let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+  for(let i=0;i<P.length;i+=3){const x=P[i],y=P[i+1],z=P[i+2];
+   if(x<mnx)mnx=x;if(y<mny)mny=y;if(z<mnz)mnz=z;if(x>mxx)mxx=x;if(y>mxy)mxy=y;if(z>mxz)mxz=z}
+  if(!(isFinite(mnx)&&isFinite(mxy)))return;
+  if(nm.indexOf('building')===0){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;
+   m.position.set(0,0,0);worldGroup.add(m);
+   col.push([mnx,mxx,mnz,mxz,mxy]);
+   if(mxy>9){tops.push([mnx+.3,mxx-.3,mnz+.3,mxz-.3,mxy]);ladder((mnx+mxx)/2,mnz-.4,0,mxy)}
+   nB++}
+  else if(nm.indexOf('vehicle')===0){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
+   col.push([mnx,mxx,mnz,mxz,mxy]);nV++}
+  else if(nm.indexOf('rubble')===0){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   if(mxy-mny>1.1)col.push([mnx,mxx,mnz,mxz,mxy]);nRb++}
+  else if(nm.indexOf('destroyed_landmark')===0){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
+   col.push([mnx,mxx,mnz,mxz,mxy]);if(mxy>7)tops.push([mnx,mxx,mnz,mxz,mxy]);nB++}
+  else if(nm.indexOf('road')===0||(nm.indexOf('sidewalk')===0)||(nm.indexOf('park')===0)||(nm.indexOf('terrain')===0)||(nm.indexOf('waterfront')===0)){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   if(nm.indexOf('terrain')===0||nm.indexOf('waterfront')===0)tops.push([mnx,mxx,mnz,mxz,mny]);
+   else tops.push([mnx,mxx,mnz,mxz,mxy]);
+   nRoad++}
+  else if(nm.indexOf('pier')===0){
+   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   tops.push([mnx,mxx,mnz,mxz,Math.max(mxy,1.2)])}
+  else{ /* burning_area, water and anything else: visual only (or walkable water bed) */
+   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   if(nm.indexOf('water')===0)tops.push([mnx,mxx,mnz,mxz,mny])}
+ });
+ /* real houses in the surveyed blocks' gaps: window openings, interiors, stairs to the roof */
+ let built=0;
+ for(let i=0;i<220&&built<70;i++){const w=RR(9,16),d=RR(9,16),h=RR(3.5,9);
+  const x=RR(-110,110),z=RR(-110,80),x1=x+w,z1=z+d;
+  if(Math.hypot(x,z-30)<14)continue; // keep spawn street clear
+  let clash=false;forNear(x-4,z-4,x1+4,z1+4,colGrid,col,b=>{if(x1>b[0]-2&&x<b[1]+2&&z1>b[2]-2&&z<b[3]+2&&b[4]>2.5)clash=1});
+  if(clash)continue;
+  cityBuilding(x,x1,z,z1,h,[0x6a655c,0x5d6154,0x705f4e,0x615c50][built%4],h>6?1:0,0,1);built++}
+ /* ground sheet so nothing floats at the horizon */
+ const gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),M(0x2f352a,{roughness:1}));
+ gnd.rotation.x=-Math.PI/2;gnd.position.set(0,-.05,0);gnd.receiveShadow=true;worldGroup.add(gnd);
+ /* gameplay dressing: war-zone ambience */
+ lamps([[-30,-40],[30,-40],[-30,20],[30,20],[0,-90],[0,40],[60,-10],[-60,-10]]);
+ burningCar(-14,-38,0);burningCar(22,-6,Math.PI/2);burningCar(-4,18,.4);
+ makeCar(8,-52,0,0x4a5a3a);makeCar(-18,10,Math.PI,0x37475a);
+ ammoCrate(4,-64,'');ammoCrate(-26,-2,'');
+ spawnDogs([[-40,-52],[36,-58],[44,26],[-46,14]]);
+ const warL=new THREE.PointLight(0xff8a3a,.7,46,1.7);warL.position.set(0,6,-30);worldGroup.add(warL);lights.push(warL);
+ spawnJet();
+ /* minimap draws city blocks from baked colliders */
+ REAL_BL=[];REAL_BL.length=0;
+ forNear(XB0,ZB0,XB1,ZB1,topsGrid,tops,()=>{});
+ col.forEach(b=>{if(b[4]>4.5&&b[1]-b[0]>4&&b[3]-b[2]>4)REAL_BL.push(b)});
+ gridBuild();
+}
 function buildMap(name){
  clearWorld();
  window.__bCount=0;
@@ -1364,9 +1500,10 @@ function buildMap(name){
   lamps([[70,-76],[120,-76],[40,-124],[150,-124]]);
   makeBoat(BOAT_X,BOAT_Z,Math.PI/2);
   const riverL=new THREE.PointLight(0x7ad0ff,.4,60,1.8);riverL.position.set(100,2,BOAT_Z);worldGroup.add(riverL);lights.push(riverL);
-  if(BAKE)baker.build(worldGroup);
-  gridBuild();
- }else if(name==='killhouse'){ // KILLHOUSE — CQB PVP arena: the image map, one huge enclosed hall
+  if(BAKE)baker.build(worldGroup); gridBuild();
+}else if(name==='realcity'){ // REALCITY — REAL-WORLD-DATA CITY MAP built from warzone_city.glb (Blender export)
+  buildRealCity();
+}else if(name==='killhouse'){ // KILLHOUSE — CQB PVP arena: the image map, one huge enclosed hall
   buildKillhouse();
  }else if(name==='camp'){ // CAMP ALPHA — remote training base, nothing else out here but hills
   trainingCamp();
@@ -1399,8 +1536,8 @@ function buildMap(name){
   const fobL=new THREE.PointLight(0xffd9a0,.6,26,1.7);fobL.position.set(106,3.4,58);worldGroup.add(fobL);lights.push(fobL);
  }else{ // blackout - industrial port
   // large warehouses
-  building(20,80,30,70,7,0x6a7076,'Port_WH1',true);building(110,170,30,70,7,0x707a6e,'Port_WH2',true);
-  building(30,90,110,150,3.5,0x787878,'Port_Office',true);building(150,200,110,150,3.5,0x767d86,'Port_WH3',true);
+  cityBuilding(20,80,30,70,7,0x6a7076,1,0,1);cityBuilding(110,170,30,70,7,0x707a6e,1,0,1);
+  cityBuilding(30,90,110,150,3.5,0x787878,0,0,1);cityBuilding(150,200,110,150,3.5,0x767d86,0,0,1);
   // container yard
   for(let gx2=0;gx2<5;gx2++)for(let gz2=0;gz2<4;gz2++){const x=110+gx2*9,z=190+gz2*7,r=rnd()<.5,L=r?2.44:6.1,Wd=r?6.1:2.44;
    box(L,2.6,Wd,M([0x6e2a24,0x2b4f8a,0x3f6b3a,0xb0762a][gx2%4],{map:ribT,roughness:.6,metalness:.3}),x,1.3,z,worldGroup);
@@ -1431,7 +1568,8 @@ const WPNS={
 const wstate={rifle:{am:30,rs:90},pistol:{am:36,rs:144},knife:{am:0,rs:0}};
 let curW='rifle';
 function switchW(w){if(curW===w||!WPNS[w])return;H.rl=0;H.cd=Math.max(H.cd,.2);curW=w;
- const we=$('wn');if(we)we.textContent=WPNS[w].name;note(WPNS[w].name,1.1);osc2('square',900,1400,.04,.06)}
+ const we=$('wn');if(we)we.textContent=WPNS[w].name;note(WPNS[w].name,1.1);osc2('square',900,1400,.04,.06);
+ ['b0','b1','b2'].forEach((id,k)=>{const b=document.getElementById(id);if(b)b.className=((k===0&&w==='rifle')||(k===1&&w==='pistol')||(k===2&&w==='knife'))?'on':''})}
 function meleeHit(ch){const f=new THREE.Vector3();cam.getWorldDirection(f);let hitAny=0;
  bots.forEach(b=>{if(b.dead)return;const dx=b.x-ch.x,dz=b.z-ch.z,d=Math.hypot(dx,dz)||1;
   if(d<2.7&&(dx*f.x+dz*f.z)/d>.5&&Math.abs(b.y-ch.y)<2.2&&wall(ch.x,ch.z,dx/d,dz/d,d)>=d){
@@ -1587,7 +1725,7 @@ function riverGuard(p){if(drive||mapName==='camp')return;
  if(p.z<RIV_Z1-1&&p.z>RIV_Z0-2&&Math.abs(p.x-BOAT_X)>3){p.z=RIV_Z1-1;p.z=cl(p.z,RIV_Z1-1,ZB1-2)}
  if(p.z<LKZ1+1&&p.z>LKZ0-1)p.z=p.z>(LKZ0+LKZ1)/2?LKZ1+1:LKZ0-1; // deep lake: no wading across
  [LK1,LK2].forEach(k=>{const dx=p.x-k[0],dz=p.z-k[1],d=Math.hypot(dx,dz);if(d<k[2]+1&&d>.01){const s=(k[2]+1)/d;p.x=k[0]+dx*s;p.z=k[1]+dz*s}})}
-function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:{x:60,z:20}}
+function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:{x:60,z:20}}
 /* squad + bots */
 function mkChar(d,x,z,c){const g=human(d);S.add(g);return{g,x,z,y:support(x,z,0),vy:0,ground:1,r:0,t:0,v:0,c,hp:100,cd:0}}
 function mover(c,dx,dz,sp,dt,jump){const n=Math.hypot(dx,dz);
@@ -1804,14 +1942,19 @@ const CAMPAIGN=[
    objText((p.z>-156?'BREACH THE NORTH FOREST — ':inRiver(p.x,p.z)||p.z<DOCK_Z&&p.z>RIV_Z1?'CROSS THE RIVER — BOAT AT THE NORTH QUAY (E) — ':'')+'WARZONE CITY — '+left+' hostile'+(left===1?'':'s')+' left');return left===0}}];
 /* ============================================================ LAN */
 let ws=null,lanPeers=new Map(),lanRetry=0,lanAddr='';
+function lbShow(lb){const el=$('lb');if(!el)return;if(!lb||!lb.length){el.style.display='none';return}
+ el.style.display='block';el.innerHTML='<b>TOP OPERATORS</b><br>'+lb.slice(0,8).map(s=>`${(s.name||'?').slice(0,16)} — ${s.k|0} kills · ${s.d|0} deaths${s.w?' · '+s.w+' wins':''}`).join('<br>')}
 function lanSend(o){if(ws&&ws.readyState===1)ws.send(JSON.stringify(o))}
 function lanConnect(room,role,cb,attempt){const att=attempt||0;
- try{ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(lanAddr||location.host)+'/ws')}catch(e){cb(false);return}
- const to=setTimeout(()=>{if(ws.readyState!==1){try{ws.close()}catch(e){}}},5000);
- ws.onopen=()=>{clearTimeout(to);lanRetry=0;
+ if(ws&&ws.readyState<=1)return; // already connecting/open — don't clobber the live socket
+ const sock=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(lanAddr||location.host)+'/ws');
+ try{ws=sock}catch(e){cb(false);return}
+ const to=setTimeout(()=>{if(sock.readyState!==1){try{sock.close()}catch(e){}}},8000);
+ sock.onopen=()=>{clearTimeout(to);lanRetry=0;
   lanSend({t:'join',room,name:lanName,pid:LANID,map:mapName,mode:lanRole,quick:onlineMode===1,pub:true,maxPlayers:16});cb(true)};
- ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(err){return}
-  if(m.t==='welcome'){note('Connected to '+(m.quick?'QUICK MATCH — ':'room "'+m.room+'" — ')+m.players.length+' player(s)',3);if(m.lb)lbShow(m.lb)}
+ sock.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(err){return}
+  if(m.t==='welcome'){note('Connected to '+(m.quick?'QUICK MATCH — ':'room "'+m.room+'" — ')+m.players.length+' player(s)',3);if(m.lb)lbShow(m.lb);
+   const hh=$('onHint');if(hh){hh.textContent='CONNECTED — '+(m.quick?'quick match':'room "'+m.room+'"')+' · '+(m.players?m.players.length:1)+' player(s)';hh.style.color='#9fd9a0';setTimeout(()=>{if(hh.textContent.indexOf('CONNECTED')===0){hh.textContent='In match. T = chat · Tab = leaderboard';hh.style.color='#62778a'}},6000)}}
   else if(m.t==='pjoin'){note(m.name+' joined the room',2.5)}
   else if(m.t==='pleave'){const peer=lanPeers.get(m.id);if(peer){S.remove(peer.g);lanPeers.delete(m.id);note((m.name||'A player')+' left',2)}}
   else if(m.t==='err'){note(m.e||'Server error',4);if(!m.keep){if(ws){ws.close();ws=null}showMenu()}}
@@ -1824,10 +1967,11 @@ function lanConnect(room,role,cb,attempt){const att=attempt||0;
     if(pl.s.shoot){const m2=muz(peer.g);tracer(m2,new THREE.Vector3(pl.s.sx,pl.s.sy,pl.s.sz),.07);snd(.05,.06)}})}
   else if(m.t==='ev'){if(m.k==='kill'&&m.a){killfeed(m.a.a||'PLAYER',m.a.b||'Enemy',m.a.tag);lanBoard(m.id,m.a.vid)}
    else if(m.k==='chatlog'&&m.a)chatAdd(m.a.n,m.a.m)}};
- ws.onerror=()=>{};
- ws.onclose=()=>{if(!running||mode!==MODES.LAN)return;
+ sock.onerror=()=>{};
+ sock.onclose=()=>{if(ws&&ws!==sock)return; // a newer socket owns the connection now
+  if(!running||mode!==MODES.LAN)return;
   if(att<20){if(att===0)note('Connection lost — reconnecting…',2.5);lanRetry=att+1;setTimeout(()=>lanConnect(room,role,()=>{},att+1),2500)}
-  else note('Could not reach the LAN server. Check firewall on the host PC.',4)}}
+  else note('Could not reach the server. Check the address or the server firewall.',4)}}
 const LANID='p'+Math.random().toString(36).slice(2,9);
 let lanTick=0;
 function lanStep(dt){if(!ws||ws.readyState!==1)return;lanTick-=dt;
@@ -1849,7 +1993,8 @@ function lanRemoteStep(dt){lanPeers.forEach(peer=>{if(peer.tx==null)return;
 /* ============================================================ MENU */
 const msubs=$('msubs');
 $('btnOnline').onclick=()=>{onlineMode=0;showSub(`
- <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Online server: <b>${location.host||'auto'}</b> — quick match drops you into the busiest room.</div>
+ <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Online server: <b>${location.host||'not set — enter it below'}</b> — quick match drops you into the busiest room.</div>
+ <input class="minput" id="inHost" placeholder="Server address — leave blank if this page came from the server" maxlength="40" value="">
  <div class="mrow"><button class="mbtn" id="onQuick">QUICK MATCH<small>fastest way into a fight</small></button><button class="mbtn" id="onBrowse">BROWSE ROOMS<small>see public rooms</small></button></div>
  <div id="roomList" style="margin:4px 0"></div>
  <input class="minput" id="inRoom" placeholder="Room code (e.g. alpha) — share it with friends" maxlength="20" value="${lanRoom||''}">
@@ -1857,6 +2002,7 @@ $('btnOnline').onclick=()=>{onlineMode=0;showSub(`
  <div class="mrow">
   <button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
  <button class="mbtn" id="mapKillhouse" style="border-color:#c96a5a">KILLHOUSE<small>CQB arena — image map</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button></div>
  <div class="mrow"><button class="mbtn" id="onCoop">HOST CO-OP<small>fight bots together</small></button><button class="mbtn" id="onFFA">DEATHMATCH<small>first to 15</small></button></div>
  <div style="text-align:center;color:#62778a;font-size:11px;margin-top:6px" id="onHint">Tip: pick a map + mode first, then QUICK MATCH. T = chat in game.</div>`);
  wireSubs();
@@ -1864,12 +2010,18 @@ $('btnOnline').onclick=()=>{onlineMode=0;showSub(`
   w2.onmessage=e=>{let m2;try{m2=JSON.parse(e.data)}catch(err){return}if(m2.t==='rooms'){$('roomList').innerHTML=m2.rooms.length?m2.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet — host one below and it appears here.</div>';
    msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};
   setTimeout(()=>{try{w2.close()}catch(e){}},15000)}catch(e){}};
-function onStart(role,quick){onlineMode=quick?1:0;lanStart(role)}
+function onStart(role,quick){onlineMode=quick?1:0;lanStart(role,quick)}
 function showSub(html){$('mmain').style.display='none';msubs.innerHTML=html;msubs.style.display='block';$('back').style.display='block';wireSubs()}
 function showMain(){$('mmain').style.display='block';msubs.style.display='none';msubs.innerHTML='';$('back').style.display='none'}
 $('back').onclick=showMain;
 $('btnStory').onclick=()=>showSub(CAMPAIGN.map((m,i)=>`<button class="mbtn" data-m="${i}">${m.title}<small>${m.brief.slice(0,72)}…</small></button>`).join('')); $('btnTrain').onclick=()=>startGame(MODES.TRAIN,'camp');
-$('btnSingle').onclick=()=>startGame(MODES.SINGLE,'compound');
+$('btnSingle').onclick=()=>showSub(`
+ <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Pick a map, then deploy:</div>
+ <div class="mrow"><button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
+ <button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button>
+ <button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
+ <button class="mbtn" id="singleGo" style="border-color:#9fc0da;text-align:center">DEPLOY<small>start on the selected map</small></button>`);
 $('btnLan').onclick=()=>showSub(`
  <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Host runs <b>lan_server.js</b>. Same PC: leave address blank. Other PCs: type the host IP below (e.g. 10.15.4.27:8080).</div>
  <input class="minput" id="inAddr" placeholder="Server address — blank if this is the host" maxlength="40" value="">
@@ -1878,25 +2030,31 @@ $('btnLan').onclick=()=>showSub(`
  <div class="mrow">
   <button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
   <button class="mbtn" id="mapKillhouse" style="border-color:#c96a5a">KILLHOUSE<small>CQB arena — image map</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
  <div class="mrow"><button class="mbtn" id="lanCoop">CO-OP<small>fight bots together</small></button><button class="mbtn" id="lanFFA">DEATHMATCH<small>everyone vs everyone</small></button></div>
  <div style="text-align:center;color:#62778a;font-size:11px;margin-top:6px" id="lanHint">Pick a map, then choose a mode to connect</div>`);
-function wireMapButtons(){const mc=$('mapCompound'),mk=$('mapKillhouse');if(!mc)return;
- mc.className='mbtn'+(mapName==='compound'?' on':'');mk.className='mbtn'+(mapName==='killhouse'?' on':'');
- mc.onclick=()=>{mapName='compound';wireMapButtons()};mk.onclick=()=>{mapName='killhouse';wireMapButtons()}}
+function wireMapButtons(){
+ const wire=(id,name)=>{const b=$(id);if(!b)return;b.className='mbtn'+(mapName===name?' on':'');b.onclick=()=>{mapName=name;wireMapButtons()}};
+ wire('mapCompound','compound');wire('mapKillhouse','killhouse');wire('mapRealCity','realcity');wire('mapOutskirts','outskirts');wire('mapBlackout','blackout')}
 wireMapButtons();
 function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>startCampaign(+b.dataset.m));wireMapButtons();
+ const sg=$('singleGo');if(sg)sg.onclick=()=>startGame(MODES.SINGLE,mapName==='killhouse'?'compound':mapName);
  const lc=$('lanCoop'),lf=$('lanFFA');if(lc){lc.onclick=()=>lanStart('coop');lf.onclick=()=>lanStart('ffa')}
  const qc=$('onQuick'),br=$('onBrowse'),oc=$('onCoop'),of=$('onFFA');
  if(qc){qc.onclick=()=>onStart(lanRole||'coop',true);br.onclick=()=>{try{const w3=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(location.host||'localhost:8080')+'/ws');w3.onopen=()=>w3.send(JSON.stringify({t:'rooms'}));w3.onmessage=e=>{let m3;try{m3=JSON.parse(e.data)}catch(err){return}if(m3.t==='rooms'&&$('roomList')){$('roomList').innerHTML=m3.rooms.length?m3.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet.</div>';
   msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};setTimeout(()=>{try{w3.close()}catch(e){}},15000)}catch(e){}};
   oc.onclick=()=>onStart('coop');of.onclick=()=>onStart('ffa')}}
-function lanStart(role){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim():'';lanName=$('inName')?($('inName').value.trim()||'Operator'):'Operator';
- if($('mapKillhouse')&&mapName!=='killhouse'&&mapName!=='compound')mapName='compound';
- const a=$('inAddr')?$('inAddr').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';lanAddr=a;
+function lanStart(role,quick){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim():'';lanName=$('inName')?($('inName').value.trim()||'Operator'):'Operator';
+ if($('mapKillhouse')&&['killhouse','compound','realcity','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
+ const ih=$('inHost')?$('inHost').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';
+ const a=ih||($('inAddr')?$('inAddr').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'');lanAddr=a;
  const base=a?(location.protocol==='https:'?'https://':'http://')+a:'';
- const hint=$('lanHint');if(hint)hint.textContent='Connecting to "'+lanRoom+'" @ '+(a||location.host||'local server')+'…';
+ const hint=$('lanHint')||$('onHint');
+ const where=a||location.host||'this machine';
+ if(hint){hint.textContent=(quick?'QUICK MATCH — searching @ ':'Connecting to "'+lanRoom+'" @ ')+where+' …';hint.style.color='#ffd98a'}
  fetch(base+'/ping').then(r=>{if(!r.ok)throw 0;return r.text()}).then(()=>startGame(MODES.LAN,mapName))
- .catch(()=>{$('lanHint').textContent='No server at '+(a||location.host||'this machine')+'. Run node lan_server.js on the host PC, allow it through the firewall, then enter its IP:port above'})}
+ .catch(()=>{const msg=(quick?'QUICK MATCH failed — no server at ':'No server at ')+where+'. '+(quick?'Serve the game from the server (node game_server.js) and open http://IP:8080.':'Run node game_server.js on the host PC, allow it through the firewall, then enter its IP:port above');
+  if(hint){hint.textContent=msg;hint.style.color='#ff8a7a'}note(msg,5);showMain()})}
 function startCampaign(i){mission=i;startGame(MODES.CAMPAIGN,CAMPAIGN[i].map)}
 function missionKill(){}
 function showStat(title,text,btn,cb){$('stTitle').textContent=title;$('stText').innerHTML=text;$('stat').style.display='block';
@@ -1916,8 +2074,8 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  /* desktop: hide touch buttons (FIRE/JUMP/…) + weapon bar for a clean CoD-style HUD; mobile keeps them */
  const isTouch=('ontouchstart'in window)||(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0);
  if(!isTouch){$('ctl').style.display='none';$('sw').style.display='none'}
- $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':'Blackout — Port';
- $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':'Open warfare zone — clear hostiles, grab a car (E)';
+ $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':'Blackout — Port';
+ $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':'Open warfare zone — clear hostiles, grab a car (E)';
  if(mode===MODES.CAMPAIGN){const ms=CAMPAIGN[mission];note(ms.title+' — '+ms.brief,6);missionState=ms.setup();if(mission!==0)riverGuard(C[act])}
  else if(mode===MODES.TRAIN){ // pure training on its own CAMP map: no hostiles anywhere
   bots.length=0;trainReset();
@@ -1932,9 +2090,8 @@ function startGame(m,map){mode=m;mapName=map;running=true;
   areas.forEach((q,i)=>{spawnBots([[q[0],q[1],q[2],q[3]]],.15);labelAreas([q],labels[i]||'Hostile')});
   objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}
  else{ // LAN / ONLINE
-  const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:[[21,79,31,69],[111,169,31,69],[31,89,111,149]]):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
+  const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
   areas.forEach((q,i)=>{spawnBots([q],0);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant');const bb=bots[bots.length-1];if(bb&&mapName==='killhouse'){bb.home=[q[0]-2.5,q[0]+2.5,q[2]-2.5,q[2]+2.5];bb.cd=1+i*.5;bb.cd0=1.3+rnd()*.8}});
-  areas.forEach(q=>{spawnBots([q],.18);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant')});
   if(lanRole==='coop')objText((onlineMode?'ONLINE CO-OP':'CO-OP')+' — clear zones with your team · T = chat');
   else objText((onlineMode?'ONLINE DEATHMATCH':'DEATHMATCH')+' — first to 15 kills · T = chat');
   lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)})}
@@ -1969,8 +2126,11 @@ addEventListener('wheel',e=>dist=cl(dist+e.deltaY*.02,5,40),{passive:true});
 jb.onpointerdown=()=>H.jumpReq=1;ab.onpointerdown=()=>H.ads=1;ab.onpointerup=ab.onpointerleave=ab.onpointercancel=()=>H.ads=0;
 gn.onpointerdown=()=>throwGrenade();
 fb.onpointerdown=()=>fb.on=1;rb.onpointerdown=()=>rb.on=1;[fb,rb].forEach(b=>b.onpointerup=b.onpointerleave=b.onpointercancel=()=>b.on=0);
-wb.onpointerdown=()=>{};/* removed — use keys 1/2/3 to switch weapons */
-function pick(i){act=i;if(!C.length)return;if(CHARS[i].gun==='sr')wstate.rifle.rs=Math.max(wstate.rifle.rs,150);[b0,b1,b2,b3].forEach((b,k)=>{if(b)b.className=k===i?'on':''})}
+/* removed — use keys 1/2/3 to switch weapons */
+function pick(i){act=i;if(!C.length)return;if(CHARS[i]&&CHARS[i].gun==='sr')wstate.rifle.rs=Math.max(wstate.rifle.rs,150);['b0','b1','b2','b3'].forEach((id,k)=>{const b=document.getElementById(id);if(b)b.className=k===i?'on':''})}
+/* weapon/op panel: click to switch weapon; 4 = HAWKEYE sniper operator */
+[['b0','rifle',-1],['b1','pistol',-1],['b2','knife',-1],['b3','rifle',3]].forEach(a=>{const b=document.getElementById(a[0]);
+ if(b)b.onclick=()=>{if(a[2]>=0&&act!==a[2])pick(a[2]);switchW(a[1]);if(a[2]>=0)note('HAWKEYE — bolt sniper · hold RMB for scope',2.5)}});
 /* weapon switching = keys 1/2/3; legacy WPN button handler removed below */
 /* ============================================================ MINIMAP */
 const mcx=m.getContext('2d'),mx=x=>(x-XB0)/(XB1-XB0)*260,mz=z=>(z-ZB0)/(ZB1-ZB0)*128;
@@ -1984,7 +2144,7 @@ function mini(){mcx.fillStyle=mapName==='compound'?'#101814':mapName==='killhous
   mcx.fillStyle='#6b4a32';[[12.6,31.6],[105.6,31.6],[198.6,31.6],[12.6,119.6],[105.6,119.6],[198.6,119.6]].forEach(t=>mcx.fillRect(kx(t[0])-1.5,kz(t[1])-1.5,3,3))}
  else{
  mcx.fillStyle='#34363b';mcx.fillRect(mx(0),mz(0),W/(XB1-XB0)*176,D/(ZB1-ZB0)*96);
- const bl=mapName==='compound'?BCompound:mapName==='outskirts'?BOutsk:[];
+ const bl=mapName==='compound'?BCompound:mapName==='outskirts'?BOutsk:mapName==='realcity'?REAL_BL:[];
  mcx.fillStyle='#585c64';bl.forEach(b=>mcx.fillRect(mx(b[0]),mz(b[2]),(b[1]-b[0])/(XB1-XB0)*260,(b[3]-b[2])/(ZB1-ZB0)*128));
  if(mapName==='compound'){mcx.fillStyle='rgba(24,34,56,.9)';mcx.fillRect(0,mz(RIV_Z0),260,(RIV_Z1-RIV_Z0)/(ZB1-ZB0)*128);
   mcx.fillStyle='#46484e';

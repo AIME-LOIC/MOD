@@ -9,7 +9,8 @@ Spawn: (105, 58). Open `compound_game.html` in any browser (internet needed once
 - **THE DEPLOY FLIGHT** — board the plane after all 7 stations: it **lifts off over the desert camp**, the world switches under you mid-flight, then you ride over **forest → the huge lake → the city skyline**, descending to the forest LZ (105,-158). When you want out, **an extraction plane is parked at the LZ** (105,-166): press E to climb out, cross back over the lake and forest, and land **back at Camp Alpha** to refit and go again — the war loop is yours.
 - **CAMPAIGN** — 6 story ops, and the story begins in training: *Boot Camp* (all 7 stations → board the plane → desert-to-war flight), *First Blood* (clear the compound), *Blackout* (sabotage the port shipment, survive the QRF), *Riverside* (locate & escort the informant HVT out of the city), *Scorched Earth* (break the warzone garrison), *WARZONE CITY* (cross the river by boat and take the enemy capital). Progress op-to-op; failures can be retried.
 - **SINGLE PLAY** — free-roam open world with patrol zones to clear, on any of the 3 maps.
-- **PLAY ONLINE** — Quick match, public room browser or private room codes, via the deployable backend (`game_server.js`). Co-op & deathmatch with anyone, anywhere.
+- **PLAY ONLINE** — Quick match, public room browser or private room codes, via the deployable backend (`game_server.js`). Co-op & deathmatch with anyone, anywhere. Maps: COMPOUND, KILLHOUSE, **REALCITY**, OUTSKIRTS, BLACKOUT.
+- **REALCITY — a real-world-data city map**: built from `warzone_city.glb` (your Blender export with surveyed terrain, roads, piers, waterfront, rubble fields and landmark ruins), plus procedurally-built real houses with window openings, interiors, and stairs to the roof filling out the blocks. If the GLB can't be found (e.g. opening the file directly without a server), it falls back to a fully playable procedural city — never a black screen.
 - **SERVER PLAY (LAN)** — Co-op (fight bots together) or Deathmatch (first to 15) with friends on your network.
 
 ## Play ONLINE (deploy the backend)
@@ -109,6 +110,7 @@ Still rigid-part rigs (no skinning), but now with camo texture maps, plate carri
 | File | What it is |
 |---|---|
 | compound_game.html | Playable prototype (this build). All gameplay is inline JS. |
+| warzone_city.glb | REALCITY map source — real-world survey mesh (Blender export) baked into the map. |
 | game_server.js | **Deployable ONLINE multiplayer backend** — static hosting + rooms + quick match + chat + persistent leaderboard + rate limiting. Run with `node game_server.js [port]` (PORT env respected). |
 | Dockerfile | Container deploy for the online backend (`docker build -t compound-ops .`). |
 | lan_server.js | Dependency-free Node LAN server (static hosting + room relay). Run with `node lan_server.js [port]`. |
