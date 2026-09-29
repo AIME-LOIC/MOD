@@ -95,6 +95,19 @@ const inRiver=(x,z)=>{if(z>RIV_Z0-1&&z<RIV_Z1+1)return 1;
  if(z>LKZ0-1&&z<LKZ1+1)return 1;
  const d1=(x-LK1[0])*(x-LK1[0])+(z-LK1[1])*(z-LK1[1]);if(d1<LK1[2]*LK1[2])return 1;
  const d2=(x-LK2[0])*(x-LK2[0])+(z-LK2[1])*(z-LK2[1]);return d2<LK2[2]*LK2[2]?1:0};
+/* ============================================================ WATER — real water physics
+   WATER = deep-water zones per map {x0,x1,z0,z1,y} with y = surface height.
+   Wading where the floor is < ~0.6 m under the surface; deeper = buoyant swim with
+   stamina drain + drowning underwater, splashes, boats that bob and lift swimmers,
+   cars that sink, grenades that splash in and fizzle (dud underwater). */
+const WATER=[];
+function waterAt(x,z,y){for(let i=WATER.length;i--;){const w=WATER[i];
+ if(x>w.x0&&x<w.x1&&z>w.z0&&z<w.z1&&y>w.y-.7&&y<w.y+2.2)return w}return null}
+function swimState(p){const w=p&&waterAt(p.x,p.z,p.y);if(!w||!w.deep)return null;
+ return {w,depth:w.y-p.y,surf:w.y}} // deep zones only: you swim or you stand on the bed
+function floorBelow(x,z,y,w){return w.bed} // true bed of the zone (terrain sheets never mask it)
+function splash(x,y,z,s){s=s||1;osc2('sine',700,180,.16,.16*s);
+ for(let i=0;i<7*s;i++)puff(x+RR(-.4,.4)*s,y+RR(0,.5),z+RR(-.4,.4)*s,RR(-1,1)*s,RR(2.2,4.4)*s,RR(-1,1)*s,RR(.7,1.6),.5,3,1)}
 const cl=(v,a,b)=>Math.max(a,Math.min(b,v)),RN=(a,b)=>a+Math.random()*(b-a);
 let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647,RR=(a,b)=>a+rnd()*(b-a);
 const $=id=>document.getElementById(id);
@@ -1535,6 +1548,15 @@ function buildSchool(){
  lamps([[0,50],[-30,10],[30,48],[95,10],[-80,10],[-30,-60],[27,-71]]);
  sandbags(-6,44,0,6);sandbags(6,44,0,6);sandbags(0,64,0,6);
  ammoCrate(0,38,'');ammoCrate(-12,54,'');ammoCrate(12,62,'');ammoCrate(27,-71,'');
+ /* above-ground swimming pool behind the small class block: 12x6 m, 1.5 m of water, step-over entry */
+ const pw=M(0x9aa8b2,{roughness:.9}),pwin=M(0x3c6a8a,{roughness:.25,metalness:.4});
+ box(.3,2,6.6,pw,-4.3,1,56,worldGroup);col.push([-4.45,-4.15,52.7,59.3,2]);
+ box(.3,2,6.6,pw,8.3,1,56,worldGroup);col.push([8.15,8.45,52.7,59.3,2]);
+ box(12.9,2,.3,pw,2,1,52.75,worldGroup);col.push([-4.45,8.45,52.6,52.9,2]);
+ box(4.2,2,.3,pw,-2.2,1,59.25,worldGroup);col.push([-4.45,-.1,59.1,59.4,2]); // north wall with a step-over gap
+ box(4.2,2,.3,pw,6.2,1,59.25,worldGroup);col.push([4.1,8.45,59.1,59.4,2]);
+ box(12.4,.12,6.1,pwin,2,.06,56,worldGroup); // painted blue bed
+ WATER.push({x0:-4.15,x1:8.15,z0:52.9,z1:59.1,y:1.55,bed:.1});
  makeCar(6,68,0,0x4a5a3a);makeCar(-14,44,Math.PI/2,0x37475a);makeCar(-20,60,0,0x555a48);
  spawnDogs([[45,70],[95,45],[-90,30],[-60,-80]]);
  /* minimap blocks from baked colliders (shared with realcity) */
@@ -1544,6 +1566,16 @@ function buildSchool(){
  gridBuild()}
 function buildMap(name){
  clearWorld();
+ WATER.length=0;
+ if(name==='compound'){ /* river (between the quays) + lake band (split around the island) + two bays.
+   Surfaces ride above the ground sheet (the old map faked water with invisible walls); beds are real. */
+  WATER.push({x0:XB0,x1:XB1,z0:RIV_Z0+3.7,z1:RIV_Z1-3.7,y:.35,bed:-3.2},
+   {x0:XB0,x1:150,z0:LKZ0,z1:LKZ1,y:.35,bed:-3.6},{x0:170,x1:XB1,z0:LKZ0,z1:LKZ1,y:.35,bed:-3.6},
+   {x0:LK1[0]-LK1[2],x1:LK1[0]+LK1[2],z0:LK1[1]-LK1[2],z1:LK1[1]+LK1[2],y:.35,bed:-3.4},
+   {x0:LK2[0]-LK2[2],x1:LK2[0]+LK2[2],z0:LK2[1]-LK2[2],z1:LK2[1]+LK2[2],y:.35,bed:-3.4})}
+ else if(name==='realcity')WATER.push({x0:-140,x1:140,z0:-95,z1:-58,y:.25,bed:-2.8}); // harbor — swimmable now
+ else if(name==='blackout')WATER.push({x0:30,x1:230,z0:246,z1:290,y:.15,bed:-2.4}); // port harbor
+ WATER.forEach(w=>w.deep=(w.y-w.bed)>1.15);
  window.__bCount=0;
  LOD=(mode===MODES.LAN||mode===MODES.CAMPAIGN)?1:0;BAKE=(name==='compound')?1:0;
  if(BAKE)baker.reset();
@@ -1565,11 +1597,9 @@ function buildMap(name){
  gnd.rotation.x=-Math.PI/2;gnd.position.set((XB0+XB1)/2,-.02,(ZB0+ZB1)/2);gnd.receiveShadow=true;worldGroup.add(gnd);tops.push([XB0,XB1,ZB0,ZB1,0]);
  /* THE HUGE LAKE (between the compound and the main city): wide band + two bays + island */
  if(name==='compound'){const wat=new THREE.Mesh(new THREE.PlaneGeometry(XB1-XB0+40,LKZ1-LKZ0),M(0x0a1822,{roughness:.18,metalness:.55}));
-  wat.rotation.x=-Math.PI/2;wat.position.set((XB0+XB1)/2,-.3,(LKZ0+LKZ1)/2);worldGroup.add(wat);
-  tops.push([XB0,XB1,LKZ0,LKZ1,-4]);
+  wat.rotation.x=-Math.PI/2;wat.position.set((XB0+XB1)/2,.32,(LKZ0+LKZ1)/2);worldGroup.add(wat);
   [LK1,LK2].forEach(k=>{const w2=new THREE.Mesh(new THREE.CircleGeometry(k[2],36),M(0x0a1822,{roughness:.18,metalness:.55}));
-   w2.rotation.x=-Math.PI/2;w2.position.set(k[0],-.29,k[1]);worldGroup.add(w2);
-   tops.push([k[0]-k[2],k[0]+k[2],k[1]-k[2],k[1]+k[2],-4])});
+   w2.rotation.x=-Math.PI/2;w2.position.set(k[0],.33,k[1]);worldGroup.add(w2);});
   /* island camp mid-lake */
   const isle=new THREE.Mesh(new THREE.CylinderGeometry(13,17,1.6,20),M(0x3f4a32,{roughness:1}));isle.position.set(160,-.45,-100);isle.receiveShadow=true;worldGroup.add(isle);
   tops.push([152,168,-108,-92,.35]);
@@ -1836,17 +1866,20 @@ function stepGrenades(dt){for(let i=grenades.length;i--;){const g2=grenades[i];g
  if(blocked(g2.p.x,nz,g2.p.y,.3))g2.v.z*=-.4;else g2.p.z=nz;
  g2.p.y+=g2.v.y*dt;const gy=support(g2.p.x,g2.p.z,g2.p.y);
  if(g2.p.y<gy+.15){g2.p.y=gy+.15;g2.v.y=Math.abs(g2.v.y)*.35;g2.v.x*=.7;g2.v.z*=.7}
+ const gw=waterAt(g2.p.x,g2.p.z,g2.p.y);
+ if(gw&&g2.p.y<gw.y){ // hit the water: splash, float, fizzle
+  if(!g2.spl){splash(g2.p.x,gw.y,g2.p.z,1.4);g2.spl=1}
+  g2.p.y=gw.y+.02;g2.v.y=Math.abs(g2.v.y)*.25;g2.v.x*=.55;g2.v.z*=.55;g2.wet=1;g2.t-=dt*1.6}
  const m=FX.find(f=>f.m===g2.m);
  if(!m){const mm=new THREE.Mesh(new THREE.SphereGeometry(.12,8,6),M(0x2e3a24,{roughness:.6}));mm.position.copy(g2.p);S.add(mm);g2.m=mm;FX.push({m:mm,t:99,gr:1})}
  else m.m.position.copy(g2.p);
- if(g2.t<=0){explode(g2.p.clone());S.remove(g2.m);const fi=FX.findIndex(f=>f.m===g2.m);if(fi>=0)FX.splice(fi,1);grenades.splice(i,1)}}}
+ if(g2.t<=0){const uw=g2.wet&&waterAt(g2.p.x,g2.p.z,g2.p.y)&&g2.p.y<=(waterAt(g2.p.x,g2.p.z,g2.p.y).y+.1);
+  if(uw)splash(g2.p.x,g2.p.y+.2,g2.p.z,1);else explode(g2.p.clone()); // soaked grenades fizzle out — dud underwater
+  S.remove(g2.m);const fi=FX.findIndex(f=>f.m===g2.m);if(fi>=0)FX.splice(fi,1);grenades.splice(i,1)}}}
 function hurt(n){ if(mode===MODES.LAN&&lanRole!=='coop')n*=.8;H.hp-=n;H.hurt=.4;H.calm=0;H.st=Math.max(0,H.st-14);
  if(H.hp<=0){if(drive)exitCar();if(mode===MODES.LAN)lanSend({t:'ev',k:'death'});respawnAll();H.hp=100;wstate.rifle.am=30;wstate.rifle.rs=Math.max(wstate.rifle.rs,60);wstate.pistol.am=36;switchW('rifle');H.gr=mapName==='camp'?8:3;H.msg=2.5}}
 function respawnAll(){C.forEach((c,i)=>{const sp=spawnPoint();c.x=sp.x+RR(-3,3);c.z=sp.z+RR(-3,3);c.y=support(c.x,c.z,0);c.vy=0;c.ground=1;c.hp=100})}
-function riverGuard(p){if(drive||mapName==='camp')return;
- if(p.z<RIV_Z1-1&&p.z>RIV_Z0-2&&Math.abs(p.x-BOAT_X)>3){p.z=RIV_Z1-1;p.z=cl(p.z,RIV_Z1-1,ZB1-2)}
- if(p.z<LKZ1+1&&p.z>LKZ0-1)p.z=p.z>(LKZ0+LKZ1)/2?LKZ1+1:LKZ0-1; // deep lake: no wading across
- [LK1,LK2].forEach(k=>{const dx=p.x-k[0],dz=p.z-k[1],d=Math.hypot(dx,dz);if(d<k[2]+1&&d>.01){const s=(k[2]+1)/d;p.x=k[0]+dx*s;p.z=k[1]+dz*s}})}
+function riverGuard(p){/* swimmers now: deep water is handled by buoyancy in mover() — old invisible walls removed */}
 function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:mapName==='school'?{x:8,z:50}:{x:60,z:20}}
 /* squad + bots */
 function mkChar(d,x,z,c){const g=human(d);const sk=skinMixer(g);if(sk){
@@ -1868,10 +1901,11 @@ function mover(c,dx,dz,sp,dt,jump){const n=Math.hypot(dx,dz);
   const inR=inRiver(c.x,c.z),nx=c.x+dx*sp*(inR?.5:1)*dt,nz=c.z+dz*sp*(inR?.5:1)*dt;
   if((!blocked(nx,c.z,c.y,.6)||inR&&!blocked(nx,c.z,0,.3))&&!carBlock(nx,c.z,c.y,.6))c.x=cl(nx,XB0+2,XB1-2);
   if((!blocked(c.x,nz,c.y,.6)||inR&&!blocked(c.x,nz,0,.3))&&!carBlock(c.x,nz,c.y,.6))c.z=cl(nz,ZB0+2,ZB1-2);
-  let a=Math.atan2(dx,dz)-c.r;a=Math.atan2(Math.sin(a),Math.cos(a));c.r+=a*Math.min(1,dt*12);c.v=sp;c.t+=dt*sp*1.05}  let gy=support(c.x,c.z,c.y);
+  let a=Math.atan2(dx,dz)-c.r;a=Math.atan2(Math.sin(a),Math.cos(a));c.r+=a*Math.min(1,dt*12);c.v=sp;c.t+=dt*sp*1.05}  let gy=support(c.x,c.z,c.y); const ww=waterAt(c.x,c.z,c.y);let swim=0;if(ww&&ww.deep){swim=1;c.ground=0;gy=Math.min(gy,ww.bed+.4)}
  if(inRiver(c.x,c.z))gy=Math.max(gy,RIV_Z0-3);
- if(c.ground){if(gy<c.y-.31){c.ground=0;c.vy=0}else{c.y=gy;if(jump){c.vy=6.4;c.ground=0}}}
- if(!c.ground){c.vy-=15*dt;c.y+=c.vy*dt;let g2=support(c.x,c.z,c.y);if(inRiver(c.x,c.z))g2=Math.max(g2,RIV_Z0-3);if(c.y<=g2){if(c.vy<-6.5)c.land=Math.min(.18,-c.vy*.016);c.y=g2;c.vy=0;c.ground=1}}}
+ if(swim){ // float with feet ~1 m under; strokes (jump) push up; exhausted swimmers sink
+  c.vy+=((ww.y-1.0)-c.y)*22*dt;c.vy-=c.vy*4.5*dt;if(jump)c.vy+=7*dt;if(c.swimSink)c.vy-=16*dt;c.y+=c.vy*dt}else if(c.ground){if(gy<c.y-.31){c.ground=0;c.vy=0}else{c.y=gy;if(jump){c.vy=6.4;c.ground=0}}}
+ if(!c.ground&&!swim){c.vy-=15*dt;c.y+=c.vy*dt;let g2=support(c.x,c.z,c.y);if(inRiver(c.x,c.z))g2=Math.max(g2,RIV_Z0-3);if(c.y<=g2){if(c.vy<-6.5)c.land=Math.min(.18,-c.vy*.016);c.y=g2;c.vy=0;c.ground=1}}}
 function botAt(x,z){return!blocked(x,z,0,.8)&&!inRiver(x,z)&&Math.hypot(x-spawnPoint().x,z-spawnPoint().z)>16}
 function place(b){for(let i=0;i<40;i++){const q=b.home,x=q[0]+Math.random()*(q[1]-q[0]),z=q[2]+Math.random()*(q[3]-q[2]);
  if(botAt(x,z)){b.x=x;b.z=z;b.y=support(x,z,0);return}}}
@@ -1964,7 +1998,7 @@ function boardPlane(){
   if(mode===MODES.CAMPAIGN&&missionState&&missionState.type==='deploy'&&missionState.stage!=='clear'&&missionState.stage!=='clearAll'){note('Finish the drop first, operator.',2.5);return}
   note('EXTRACTION — climbing out of the warzone',3);
   flyIntro();flyBack=()=>{startGame(MODES.TRAIN,'camp');note('BACK AT CAMP ALPHA — refit and go again',4)}}}
-function exitCar(){if(!drive)return;if(drive.boat&&inRiver(drive.x,drive.z)){note('Moor the boat at a dock first (E near shore)',2.5);return}
+function exitCar(){if(!drive)return;if(drive.boat&&inRiver(drive.x,drive.z)&&!swimState(C[act])){note('Moor the boat at a dock first (E near shore)',2.5);return}
  const c=C[act],ex=drive.x-Math.cos(drive.r)*2.2,ez=drive.z+Math.sin(drive.r)*2.2;
  if(!blocked(ex,ez,0,.6)&&!inRiver(ex,ez)){c.x=ex;c.z=ez}else{c.x=drive.x;c.z=drive.z-3}
  if(inRiver(c.x,c.z))c.z=RIV_Z1+2.5;
@@ -1978,7 +2012,14 @@ function driveStep(dt){const c=drive;
   if(!blocked(nx,c.z,0,1.2))c.x=cl(nx,XB0+3,XB1-3);else c.v*=.3;
   if(!blocked(c.x,nz,0,1.2))c.z=cl(nz,ZB0+3,ZB1-3);else c.v*=.3;
   if(c.z<RIV_Z0+3){c.z=RIV_Z0+3;c.v*=.5}
-  c.g.position.set(c.x,-.12+Math.sin(now*.002)*.05,c.z);c.g.rotation.y=c.r;
+  const bw=waterAt(c.x,c.z,-.1),surf=bw?bw.y:-.12; // boats ride ON the water surface now
+  if(bw&&Math.abs(c.v)>1.6&&rnd()<.3)puff(c.x-Math.sin(c.r)*2,surf+.1,c.z-Math.cos(c.r)*2,RR(-.4,.4),RR(.8,1.6),RR(-.4,.4),RR(1.2,2.4),.35,3,1); // wake
+  c.bob=(c.bob||0)+dt*(1+Math.abs(c.v)*.12);
+  c.g.position.set(c.x,surf+.08+Math.sin(c.bob*1.7)*.05-Math.min(.12,Math.abs(c.v)*.012),c.z);c.g.rotation.y=c.r;
+  c.g.rotation.x=Math.sin(c.bob*1.3)*.02;c.g.rotation.z=cl(-c.steer*.12+Math.sin(c.bob*.9)*.02,-.15,.15); // bob + lean into turns
+  const sw2=swimState(C[act]);
+  if(sw2&&sw2.surf>c.y+.3)C[act].y=Math.max(C[act].y,surf-.2); // swimming squadmates bob up alongside
+  C.forEach(o=>{const swp=swimState(o);if(swp&&Math.hypot(o.x-c.x,o.z-c.z)<5)o.y=Math.max(o.y,surf-.25)});
   c.cbox[0]=c.x-1.4;c.cbox[1]=c.x+1.4;c.cbox[2]=c.z-3;c.cbox[3]=c.z+3;
   C.forEach((o,i)=>{if(i===act)return;const d=Math.hypot(o.x-c.x,o.z-c.z);if(d>7){o.x=c.x+RR(-3,3);o.z=cl(c.z+RR(-3,3),RIV_Z1+2,ZB1-4);o.y=0;o.ground=1}});
   bots.forEach((b,i)=>{if(!b.dead&&Math.hypot(b.x-c.x,b.z-c.z)<2.6)killBot(i,false)});
@@ -2001,7 +2042,14 @@ function driveStep(dt){const c=drive;
  const hx=Math.abs(fx2)*2.3+Math.abs(rgx)*1.05,hz=Math.abs(fz2)*2.3+Math.abs(rgz)*1.05;
  c.cbox[0]=c.x-hx;c.cbox[1]=c.x+hx;c.cbox[2]=c.z-hz;c.cbox[3]=c.z+hz;
  c.g.position.set(c.x,0,c.z);c.g.rotation.y=c.r;
- if(inRiver(c.x,c.z)){c.x-=vx2*dt*1.4;c.z-=vz2*dt*1.4;c.vx=c.vz=0;if(spd>4){hurt(6);note('Too deep — cars sink at the shore!',2)}}
+ const cw2=waterAt(c.x,c.z,0);
+ if(cw2){ // cars sink for real now: plunge, bubble, then stay on the bed
+  if(!c.sinkT){c.sinkT=0;splash(c.x,cw2.y,c.z,2);note('The car is going under!',2.5)}
+  c.sinkT+=dt;const bed=cw2.bed+.1;
+  c.y=Math.max(bed+.1,c.y-dt*(0.55+c.sinkT*.6));c.vx=c.vz=0;c.v*=.4;
+  if(rnd()<.25)puff(c.x+RR(-1,1),cw2.y,c.z+RR(-1,1),RR(-.3,.3),RR(1,2),RR(-.3,.3),RR(.8,1.8),.4,3,1);
+  if(c.sinkT>3.2&&!c.drowned){c.drowned=1;hurt(100);note('You drowned with the car.',3)}
+  c.g.position.set(c.x,c.y,c.z);p.y=c.y;return}
  c.wheels.forEach(w2=>{w2.spin.rotation.y+=vF*dt/.38;if(w2.front)w2.st.rotation.y=c.steer*.65});
  if(spd>3&&(mapName==='camp'||spd>9)){carDust-=dt;if(carDust<=0){carDust=.05;
   puff(c.x-fx2*2.2,.3,c.z-fz2*2.2,fx2*2+RR(-1,1),RR(.5,1.5),fz2*2+RR(-1,1),mapName==='camp'?RR(1.6,2.6):RR(.8,1.4),mapName==='camp'?.22:.14,mapName==='camp'?0:1,3)}}
@@ -2282,6 +2330,7 @@ function mini(){mcx.fillStyle=mapName==='compound'?'#101814':mapName==='killhous
  else{
  mcx.fillStyle='#34363b';mcx.fillRect(mx(0),mz(0),W/(XB1-XB0)*176,D/(ZB1-ZB0)*96);  const bl=mapName==='compound'?BCompound:mapName==='outskirts'?BOutsk:(mapName==='realcity'||mapName==='school')?REAL_BL:[];
  mcx.fillStyle='#585c64';bl.forEach(b=>mcx.fillRect(mx(b[0]),mz(b[2]),(b[1]-b[0])/(XB1-XB0)*260,(b[3]-b[2])/(ZB1-ZB0)*128));
+ mcx.fillStyle='rgba(24,34,56,.9)';WATER.forEach(w=>mcx.fillRect(mx(w.x0),mz(w.z0),(w.x1-w.x0)/(XB1-XB0)*260,(w.z1-w.z0)/(ZB1-ZB0)*128)); // all water on the minimap
  if(mapName==='compound'){mcx.fillStyle='rgba(24,34,56,.9)';mcx.fillRect(0,mz(RIV_Z0),260,(RIV_Z1-RIV_Z0)/(ZB1-ZB0)*128);
   mcx.fillStyle='#46484e';
   /* [x0,z0,w,d] — city blocks + warzone ruins on the minimap */
@@ -2310,9 +2359,20 @@ let last=performance.now();
  if(stick){ix+=stick.dx;iz-=stick.dy}
  const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
  if(drive){if(drive.boat)drive.g.rotation.z=0;driveStep(dt);p.t+=Math.abs(drive.v)*dt*.5;p.v=Math.abs(drive.v);if(!drive.boat)drive.g.rotation.z=cl(drive.g.rotation.z+((drive.lastSteer||0)*-.03*Math.min(1,Math.abs(drive.v)/10)-drive.g.rotation.z)*Math.min(1,dt*6),-.09,.09)}
- else{if(drive)drive.g.rotation.z=0;const spr=(K.ShiftLeft||K.ShiftRight)&&!H.ads&&H.st>8&&iz>0;
-  mover(p,fx*iz-fz*ix,fz*iz+fx*ix,H.ads?3.6:spr?9:5,dt,H.jumpReq||(K.Space?1:0));
-  if(spr&&p.v>7)H.st=Math.max(0,H.st-dt*13);else H.st=Math.min(100,H.st+dt*9)};
+ else{if(drive)drive.g.rotation.z=0;const swm=swimState(p),spr=(K.ShiftLeft||K.ShiftRight)&&!H.ads&&H.st>8&&!swm&&iz>0;
+  if(swm&&!p.swim){p.swim=1;splash(p.x,swm.surf,p.z,1.3);note('SWIMMING — watch your stamina!',2)}if(!swm)p.swim=0;
+  if(!swm&&p.wasDeep){p.wasDeep=0;splash(p.x,support(p.x,p.z,p.y)+.1,p.z,1)}
+  if(swm&&swm.depth>1.3)p.wasDeep=1;
+  mover(p,fx*iz-fz*ix,fz*iz+fx*ix,swm?2.6:H.ads?3.6:spr?9:5,dt,H.jumpReq||(K.Space?1:0));
+  if(swm){ // strokes cost stamina; exhausted = you slip under, then you drown
+   p.swimSink=(H.st<=0)?1:0;
+   H.st=Math.max(0,H.st-(swm.depth>1.3?7.5:4)*dt);
+   if(p.y<swm.surf-1.55){H.air=(H.air||8)-dt;if(H.air<=0){H.air=0;hurt(14*dt*10);H.hurt=.25}
+    if(H.air<2.5)note('DROWNING — surface now!',.5)}
+   else H.air=Math.min(8,(H.air||8)+dt*3);
+   if(p.ground&&swm.depth<.55)p.swim=0}
+  else{H.air=Math.min(8,(H.air||8)+dt*4);
+   if(spr&&p.v>7)H.st=Math.max(0,H.st-dt*13);else H.st=Math.min(100,H.st+dt*9)}};
  if(!drive){const lad=ladders.find(l=>Math.abs(p.x-l.x)<.95&&Math.abs(p.z-l.z)<.95&&p.y>l.y0-.6&&p.y<l.y1+.4);
   if(lad){if(iz>0){p.y=Math.min(p.y+dt*3.2,lad.y1);p.vy=0;p.ground=0;p.x+=(lad.x-p.x)*Math.min(1,dt*10);p.z+=(lad.z-p.z)*Math.min(1,dt*10);if(p.y>=lad.y1-.01)p.ground=1}
    else if(iz<0&&p.y>lad.y0){p.y=Math.max(p.y-dt*3.4,lad.y0);p.vy=0;p.ground=0}}}
