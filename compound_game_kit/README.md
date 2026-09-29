@@ -8,9 +8,10 @@ Spawn: (105, 58). Open `compound_game.html` in any browser (internet needed once
 - **TRAINING** — *start here.* **Camp Alpha is its own remote desert map** — fenced base in open sand, blowing sand on the wind, support buildings outside the fence, zero hostiles. **7 guided stations in enforced order**, each marked by a **green guidance beam** with a compass readout (distance + direction) and a "next:" hint: 1 rifle range (12 reactive targets) · 2 drone line (lead your shots) · 3 grenade range (painted rings, G) · 4 sniper challenge (60 m steel, Hawkeye + RMB) · 5 CQB house clear (real upstairs floor) · 6 obstacle course (4 checkpoints) · 7 tower climb (hold W on the rungs). **The cargo plane refuses to board until all 7 are done.**
 - **THE DEPLOY FLIGHT** — board the plane after all 7 stations: it **lifts off over the desert camp**, the world switches under you mid-flight, then you ride over **forest → the huge lake → the city skyline**, descending to the forest LZ (105,-158). When you want out, **an extraction plane is parked at the LZ** (105,-166): press E to climb out, cross back over the lake and forest, and land **back at Camp Alpha** to refit and go again — the war loop is yours.
 - **CAMPAIGN** — 6 story ops, and the story begins in training: *Boot Camp* (all 7 stations → board the plane → desert-to-war flight), *First Blood* (clear the compound), *Blackout* (sabotage the port shipment, survive the QRF), *Riverside* (locate & escort the informant HVT out of the city), *Scorched Earth* (break the warzone garrison), *WARZONE CITY* (cross the river by boat and take the enemy capital). Progress op-to-op; failures can be retried.
-- **SINGLE PLAY** — free-roam open world with patrol zones to clear, on any of the 3 maps.
-- **PLAY ONLINE** — Quick match, public room browser or private room codes, via the deployable backend (`game_server.js`). Co-op & deathmatch with anyone, anywhere. Maps: COMPOUND, KILLHOUSE, **REALCITY**, OUTSKIRTS, BLACKOUT.
+- **SINGLE PLAY** — free-roam open world with patrol zones to clear, on any of the 4 maps.
+- **PLAY ONLINE** — Quick match, public room browser or private room codes, via the deployable backend (`game_server.js`). Co-op & deathmatch with anyone, anywhere. Maps: COMPOUND, KILLHOUSE, **REALCITY**, **SOS CAMPUS**, OUTSKIRTS, BLACKOUT.
 - **REALCITY — a real-world-data city map**: built from `warzone_city.glb` (your Blender export with surveyed terrain, roads, piers, waterfront, rubble fields and landmark ruins), plus procedurally-built real houses with window openings, interiors, and stairs to the roof filling out the blocks. If the GLB can't be found (e.g. opening the file directly without a server), it falls back to a fully playable procedural city — never a black screen.
+- **SOS CAMPUS — a school map**: built from `sos_technical_school_v3.glb` (trimesh export of the SOS Technical School survey: 13 named teaching blocks, boys/girls dorms, admin + labs, main hall, dining & kitchen, workshops, football pitch, basketball court, gatehouse and hedge line on a 320×320 m campus). Every building gets AABB colliders and a walkable roof with a ladder; a fallback campus is built if the GLB can't load.
 - **SERVER PLAY (LAN)** — Co-op (fight bots together) or Deathmatch (first to 15) with friends on your network.
 
 ## Play ONLINE (deploy the backend)
@@ -111,13 +112,16 @@ Still rigid-part rigs (no skinning), but now with camo texture maps, plate carri
 |---|---|
 | compound_game.html | Playable prototype (this build). All gameplay is inline JS. |
 | warzone_city.glb | REALCITY map source — real-world survey mesh (Blender export) baked into the map. |
+| sos_technical_school_v3.glb | SOS CAMPUS map source — school survey mesh (trimesh export) baked into the map. |
+| character_human.glb | Organic skinned human (27 joints, Idle+Walk clips, vertex-color camo, Blender build). Drives the player squad in-game when loadable; the procedural rig remains the fallback. Verify with `node ../tools/verify_glb.js character_human.glb`. |
 | game_server.js | **Deployable ONLINE multiplayer backend** — static hosting + rooms + quick match + chat + persistent leaderboard + rate limiting. Run with `node game_server.js [port]` (PORT env respected). |
 | Dockerfile | Container deploy for the online backend (`docker build -t compound-ops .`). |
 | lan_server.js | Dependency-free Node LAN server (static hosting + room relay). Run with `node lan_server.js [port]`. |
 | START SERVER (LAN).bat / start-server.sh | One-click launchers that open the firewall and start the server. |
-| e2e_test.js, physics_test.js, backend_test.js, leave_test.js | Node test suites (no deps): run `node physics_test.js`, `node backend_test.js`, `node arena_test.js`, etc. |
+| e2e_test.js, physics_test.js, backend_test.js, leave_test.js, arena_test.js, school_test.js | Node test suites (no deps): run `node physics_test.js`, `node backend_test.js`, `node arena_test.js`, `node school_test.js`, etc. |
 | compound_map_fixed.glb | Original compound map mesh (unchanged). |
 | character_ranger.glb / character_vega.glb | Original character rigs (unchanged). |
+| ../tools/ | Asset pipeline: `blender_bridge.py` (live Blender ↔ agent bridge), `build_character.py` (headless character builder), `verify_glb.js` (dependency-free GLB checker), `verify_glb.html` (browser verify page), `blend_cmd.sh` (bridge client), `CONNECT-BLENDER.md` (setup guide). |
 | map_colliders.json | Original compound collision boxes (unchanged). |
 
 ## Known limits

@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>verify</title>
+<style>body{margin:0;background:#20242c}canvas{display:block}</style></head>
+<body><div id="out">running</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+const out = [];
+function say(m){ out.push(m); document.getElementById('out').textContent = out.join('\n'); }
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(50, 1.6, 0.1, 100);
+cam.position.set(0, 1.2, 3.2); cam.lookAt(0, 1.0, 0);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(640, 400);
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+const dl = new THREE.DirectionalLight(0xffffff, 0.8); dl.position.set(2, 3, 4); scene.add(dl);
+
+new THREE.GLTFLoader().load('character_human.glb', gltf => {
+  const obj = gltf.scene;
+  scene.add(obj);
+  // --- bones ---
+  let bones = 0; obj.traverse(o => { if (o.isBone) bones++; });
+  say((bones >= 20 ? 'PASS' : 'FAIL') + ': bones=' + bones);
+  // --- skin weights ---
+  let skinned = 0, maxW = 0, sumW = 0, wN = 0;
+  obj.traverse(o => {
+    if (o.isSkinnedMesh) {
+      skinned++;
+      const w = o.geometry.attributes.skinWeight;
+      for (let i = 0; i < w.count; i++) {
+        let s = 0; for (let k = 0; k < 4; k++) s += w.getComponent(i, k);
+        sumW += s; wN++;
+        if (s > maxW) maxW = s;
+      }
+    }
+  });
+  say((skinned >= 1 ? 'PASS' : 'FAIL') + ': skinnedMeshes=' + skinned);
+  say((Math.abs(maxW - 1) < 1e-3 ? 'PASS' : 'FAIL') + ': weights normalized (max sum=' + maxW.toFixed(6) + ', avg=' + (sumW / wN).toFixed(4) + ')');
+  // --- vertex colors survive ---
+  let vc = 0;
+  obj.traverse(o => { if (o.isMesh && o.geometry.attributes.color) vc += o.geometry.attributes.color.count; });
+  say((vc > 500 ? 'PASS' : 'FAIL') + ': vertex colors=' + vc);
+  // --- height ~1.87m ---
+  const box = new THREE.Box3().setFromObject(obj);
+  const h = box.max.y - box.min.y;
+  say((h > 1.6 && h < 2.1 ? 'PASS' : 'FAIL') + ': height=' + h.toFixed(3) + 'm');
+  // --- animations present + actually move the mesh ---
+  const names = gltf.animations.map(a => a.name);
+  say((gltf.animations.length >= 2 ? 'PASS' : 'FAIL') + ': animations=' + JSON.stringify(names));
+  const mixer = new THREE.AnimationMixer(obj);
+  const walkClip = THREE.AnimationClip.findByName(gltf.animations, 'Walk') || gltf.animations[0];
+  const action = mixer.clipAction(walkClip);
+  action.play();
+  const mesh = (function findSkinned(root){ let m=null; root.traverse(o=>{ if(!m&&o.isSkinnedMesh) m=o; }); return m; })(obj);
+  const p0 = mesh.geometry.attributes.position.array.slice(0, 3);
+  mixer.update(0.0);
+  const y0 = mesh.getSkeleton().bones[10].getWorldPosition(new THREE.Vector3()).clone();
+  mixer.update(0.25);
+  const y1 = mesh.getSkeleton().bones[10].getWorldPosition(new THREE.Vector3());
+  const moved = y0.distanceTo(y1);
+  say((moved > 0.02 ? 'PASS' : 'FAIL') + ': Walk anim moves bones (Δ=' + moved.toFixed(3) + 'm)');
+  // --- render a frame and confirm pixels vary (not black screen) ---
+  renderer.render(scene, cam);
+  const gl = renderer.getContext();
+  const px = new Uint8Array(4 * 100);
+  gl.readPixels(300, 200, 10, 10, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  let rMin = 255, rMax = 0;
+  for (let i = 0; i < px.length; i += 4) { const r = px[i]; if (r < rMin) rMin = r; if (r > rMax) rMax = r; }
+  say((rMax > 20 ? 'PASS' : 'FAIL') + ': renders to pixels (r range ' + rMin + '..' + rMax + ')');
+  say('DONE ' + (out.some(l => l.startsWith('FAIL')) ? 'WITH FAILURES' : '— ALL PASS'));
+}, undefined, err => { say('FAIL: loader error: ' + err); say('DONE'); });
+</script></body></html>

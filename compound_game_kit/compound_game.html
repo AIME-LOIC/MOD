@@ -81,6 +81,8 @@ button.on{opacity:1;font-weight:600;background:rgba(120,180,140,.18)}
 <div class="p" id="ctl" style="display:none"><button id="fb">FIRE</button><button id="jb">JUMP</button><button id="ab">ADS</button><button id="gn">GRN</button><button id="rb">R</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/utils/SkeletonUtils.js"></script>
 <script>
 'use strict';
 /* ============================================================ CORE */
@@ -157,8 +159,18 @@ function buildGroundTex(mapName){
   for(let i=0;i<9000;i++){gx.fillStyle='rgba(20,20,22,.25)';gx.fillRect(px(58+RN(0,98)),pz(150+RN(0,90)),2,2)}}
  else if(mapName==='outskirts'){road(120,-10,120,290,9,'#3a3a3c');road(20,140,300,140,8,'#3a3a3c');road(-150,58,110,58,7,'#413a30');
   gx.fillStyle='rgba(214,200,120,.5)';for(let z=0;z<290;z+=7)gx.fillRect(px(119.4),pz(z),2.5,10)}
+ else if(mapName==='school'){ // school campus: packed-dirt quad, painted sports areas
+  gx.fillStyle='#5e5644';gx.fillRect(0,0,2048,2048);
+  gx.fillStyle='rgba(57,100,47,.85)';gx.fillRect(px(-12),pz(-113),77/WW*2048,84/DD*2048);
+  gx.fillStyle='rgba(140,74,48,.8)';gx.fillRect(px(-2),pz(-40),28/WW*2048,31/DD*2048);
+  gx.strokeStyle='rgba(228,222,200,.5)';gx.lineWidth=3;
+  gx.strokeRect(px(-12),pz(-113),77/WW*2048,84/DD*2048);gx.strokeRect(px(-2),pz(-40),28/WW*2048,31/DD*2048);  gx.strokeStyle='#4a463c';gx.lineWidth=7/WW*2048;gx.lineCap='round';
+  gx.beginPath();gx.moveTo(px(-84),pz(15));gx.lineTo(px(140),pz(15));gx.stroke();
+  gx.lineWidth=6/WW*2048;
+  gx.beginPath();gx.moveTo(px(-81),pz(-1));gx.lineTo(px(140),pz(-1));gx.stroke();
+  for(let i=0;i<5000;i++){gx.fillStyle='rgba(40,36,26,.3)';gx.fillRect(RN(0,2048),RN(0,2048),2,2)}}
  else if(mapName==='camp'){ // desert: sand, wind ripples, wadi patches, perimeter tracks
- gx.fillStyle='#b99a5e';gx.fillRect(0,0,2048,2048);
+  gx.fillStyle='#b99a5e';gx.fillRect(0,0,2048,2048);
  for(let i=0;i<60000;i++){const s=RN(0,26)|0;gx.fillStyle=`rgba(${180+s},${148+s},${92+s},.5)`;gx.fillRect(RN(0,2048),RN(0,2048),RN(1,4),RN(1,4))}
  for(let i=0;i<46;i++){const x=RN(0,2048),y=RN(0,2048),r=RN(60,190),gr=gx.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(122,96,54,.4)');gr.addColorStop(1,'rgba(122,96,54,0)');gx.fillStyle=gr;gx.fillRect(x-r,y-r,2*r,2*r)}
  road(99,80,198,80,7,'#8f7a4e');road(99,28,198,28,7,'#8f7a4e');road(150,80,150,-12,7,'#8f7a4e');
@@ -1422,6 +1434,114 @@ function buildRealCity(){
  col.forEach(b=>{if(b[4]>4.5&&b[1]-b[0]>4&&b[3]-b[2]>4)REAL_BL.push(b)});
  gridBuild();
 }
+/* ============================================================ SKINNED HUMAN — character_human.glb
+   Organic skinned rig (27 joints, Idle+Walk clips, vertex-color camo). Used by mkChar for the squad
+   when the GLB loads; the procedural rig below stays as the fallback for bots, offline and tests. */
+const HUMAN_GLB='character_human.glb';
+let HUMAN=null; // {scene,clips:{Idle,Walk}}
+function loadHumanGLB(){
+ if(typeof THREE.GLTFLoader!=='function'||typeof THREE.SkeletonUtils!=='object')return;
+ try{new THREE.GLTFLoader().load(HUMAN_GLB,g=>{
+  const clips={};(g.animations||[]).forEach(a=>clips[a.name]=a);
+  if(clips.Walk)HUMAN={scene:g.scene,clips}},undefined,()=>{})}catch(e){}}
+if(typeof document!=='undefined'&&document.getElementById('g'))loadHumanGLB();
+function skinMixer(ch){ // attach a skinned-human clone to a char record; null if unavailable
+ if(!HUMAN||!THREE.SkeletonUtils)return null;
+ let clone;try{clone=THREE.SkeletonUtils.clone(HUMAN.scene)}catch(e){return null}
+ clone.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false}}); // r128 skinned culling fix
+ const m=new THREE.AnimationMixer(clone);
+ const idleA=HUMAN.clips.Idle?m.clipAction(HUMAN.clips.Idle):null;
+ const walkA=m.clipAction(HUMAN.clips.Walk);
+ if(idleA)idleA.play();walkA.play();walkA.setEffectiveWeight(0);
+ ch.mix={m:m,idle:idleA,walk:walkA};
+ return clone}
+function skinStep(ch,dt){const x=ch.mix;if(!x)return;
+ const w=THREE.MathUtils.clamp((ch.v||0)/6,0,1);
+ x.walk.time=x.m.time; // keep Walk phase-locked with Idle for a clean crossfade
+ x.walk.setEffectiveWeight(w);if(x.idle)x.idle.setEffectiveWeight(1-w);
+ x.m.update(dt)}
+/* ============================================================ SOS CAMPUS — school map built from sos_technical_school_v3.glb
+   320x320 m school campus mesh (trimesh export): 13 named teaching blocks + dorms, main hall, dining,
+   workshops, football pitch, basketball court, gatehouse + hedge line. Buildings get AABB colliders,
+   walkable flat roofs with ladders; if the GLB can't load (file:// etc.) a fallback campus is built. */
+function schoolFallback(){
+ for(let gx2=0;gx2<6;gx2++)for(let gz2=0;gz2<5;gz2++){
+  const x=-125+gx2*50,z=-100+gz2*50;
+  if(Math.hypot(x,z)<25)continue;
+  cityBuilding(x-14,x+14,z-9,z+9,4.5,[0x8c8272,0x82786a,0x96907e][(gx2+gz2)%3],1,0)}
+ lamps([[-30,-20],[30,-20],[-30,20],[30,20],[0,50],[0,-50]]);
+ sandbags(-6,8,0,6);sandbags(6,8,0,6);
+ ammoCrate(10,-12,'');ammoCrate(-12,14,'');
+ makeCar(20,40,0,0x4a5a3a);makeCar(-24,36,Math.PI/2,0x37475a);
+ gridBuild()}
+function buildSchool(){
+ const gname='sos_technical_school_v3.glb';let buf=null;
+ try{const req=new XMLHttpRequest();req.open('GET',gname,false);req.responseType='arraybuffer';req.send();
+  if((req.status===200||req.status===0)&&req.response&&req.response.byteLength>28)buf=new Uint8Array(req.response)}catch(e){}
+ if(!buf){schoolFallback();note('SOS CAMPUS — school mesh not found, built the fallback campus instead',4);return}
+ let gltf=null,bin=null;
+ try{const dv=new DataView(buf.buffer,buf.byteOffset,buf.byteLength);
+  let off=12;
+  while(off+8<=buf.byteLength){const len=dv.getUint32(off,true),typ=dv.getUint32(off+4,true);off+=8;
+   if(typ===0x4E4F534A)gltf=JSON.parse(new TextDecoder().decode(new Uint8Array(buf.buffer,buf.byteOffset+off,len)));
+   else if(typ===0x004E4942)bin=new Uint8Array(buf.buffer,buf.byteOffset+off,len);
+   off+=len}}catch(e){schoolFallback();return}
+ if(!gltf||!bin){schoolFallback();return}
+ const access=i=>{const a=gltf.accessors[i],bv=gltf.bufferViews[a.bufferView||0];
+  const comp={5126:Float32Array,5123:Uint16Array,5125:Uint32Array,5121:Uint8Array,5122:Int16Array}[a.componentType];
+  const nper={SCALAR:1,VEC2:2,VEC3:3,VEC4:4}[a.type]; // typed-array length counts ELEMENTS, not bytes
+  return new comp(bin.buffer,bin.byteOffset+(bv.byteOffset||0)+(a.byteOffset||0),a.count*nper)};
+ const VC=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.92});
+ const colM={ground:M(0x4a5238,{roughness:1}),building:M(0x9a9184,{roughness:.9}),pitch:M(0x39642f,{roughness:1}),
+  court:M(0x8a4a30,{roughness:.95}),gate:M(0x5a5f64,{roughness:.6,metalness:.4}),hedge:M(0x2c4a22,{roughness:1}),flat:M(0x8a8578,{roughness:.9})};
+ const matFor=s2=>{const s=(s2||'').toLowerCase();
+  if(s.indexOf('football')===0)return colM.pitch;if(s.indexOf('basketball')===0)return colM.court;
+  if(s.indexOf('hedge')===0)return colM.hedge;if(s.indexOf('gate')===0||s.indexOf('signpost')===0)return colM.gate;
+  if(s.indexOf('ground')===0)return colM.ground;
+  if(s.indexOf('_g')>=0||s.indexOf('admin')===0)return colM.building;
+  return colM.flat};
+ gltf.nodes.forEach(n=>{
+  if(n.mesh===undefined)return;
+  const mesh=gltf.meshes[n.mesh];if(!mesh)return;
+  const nm=(n.name||'').toLowerCase(),mat=matFor(n.name);
+  mesh.primitives.forEach(pr=>{
+   const pos=access(pr.attributes.POSITION);
+   const geo=new THREE.BufferGeometry();
+   geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+   if(pr.indices!==undefined)geo.setIndex(new THREE.BufferAttribute(access(pr.indices),1));
+   if(pr.attributes.COLOR_0!==undefined){
+    const ca=access(pr.attributes.COLOR_0),rgba=new Float32Array(ca.length);
+    for(let i=0;i<ca.length;i++)rgba[i]=ca[i]/255;
+    geo.setAttribute('color',new THREE.BufferAttribute(rgba,4))}
+   geo.computeVertexNormals();
+   const m=new THREE.Mesh(geo,pr.attributes.COLOR_0!==undefined?VC:mat);
+   m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m)});
+  /* world AABB: this export bakes placement into node transforms (matrix or rotation+scale) */
+  let M2;
+  if(n.matrix)M2=n.matrix;
+  else{const q=n.rotation||[0,0,0,1],s=n.scale||[1,1,1],x=q[0],y=q[1],z=q[2],w=q[3];
+   const x2=x+x,y2=y+y,z2=z+z,xx=x*x2,yy=y*y2,zz=z*z2,xy=x*y2,xz=x*z2,yz=y*z2,wx=w*x2,wy=w*y2,wz=w*z2;
+   M2=[(1-(yy+zz))*s[0],(xy+wz)*s[0],(xz-wy)*s[0],0,(xy-wz)*s[1],(1-(xx+zz))*s[1],(yz+wx)*s[1],0,(xz+wy)*s[2],(yz-wx)*s[2],(1-(xx+yy))*s[2],0,0,0,0,1]}
+  let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+  const pv=access(mesh.primitives[0].attributes.POSITION);
+  for(let i=0;i<pv.length;i+=3){const x=pv[i],y=pv[i+1],z=pv[i+2];
+   const wx=M2[0]*x+M2[4]*y+M2[8]*z+M2[12],wy=M2[1]*x+M2[5]*y+M2[9]*z+M2[13],wz=M2[2]*x+M2[6]*y+M2[10]*z+M2[14];
+   if(wx<mnx)mnx=wx;if(wx>mxx)mxx=wx;if(wy<mny)mny=wy;if(wy>mxy)mxy=wy;if(wz<mnz)mnz=wz;if(wz>mxz)mxz=wz}
+  if(!isFinite(mnx))return;
+  if(nm.indexOf('football')===0||nm.indexOf('basketball')===0){tops.push([mnx,mxx,mnz,mxz,.1]);return} // walkable, not a wall
+  if(nm.indexOf('ground')===0){tops.push([mnx,mxx,mnz,mxz,mxy]);return}
+  col.push([mnx,mxx,mnz,mxz,mxy]); // gatehouse, hedges, signpost, all buildings: solid
+  if(mxy>3.5){tops.push([mnx+.35,mxx-.35,mnz+.35,mxz-.35,mxy]);ladder((mnx+mxx)/2,mnz-.42,0,mxy)}});
+ lamps([[0,50],[-30,10],[30,48],[95,10],[-80,10],[-30,-60],[27,-71]]);
+ sandbags(-6,44,0,6);sandbags(6,44,0,6);sandbags(0,64,0,6);
+ ammoCrate(0,38,'');ammoCrate(-12,54,'');ammoCrate(12,62,'');ammoCrate(27,-71,'');
+ makeCar(6,68,0,0x4a5a3a);makeCar(-14,44,Math.PI/2,0x37475a);makeCar(-20,60,0,0x555a48);
+ spawnDogs([[45,70],[95,45],[-90,30],[-60,-80]]);
+ /* minimap blocks from baked colliders (shared with realcity) */
+ REAL_BL=[];REAL_BL.length=0;
+ forNear(XB0,ZB0,XB1,ZB1,topsGrid,tops,()=>{});
+ col.forEach(b=>{if(b[4]>4.5&&b[1]-b[0]>4&&b[3]-b[2]>4)REAL_BL.push(b)});
+ gridBuild()}
 function buildMap(name){
  clearWorld();
  window.__bCount=0;
@@ -1503,6 +1623,8 @@ function buildMap(name){
   if(BAKE)baker.build(worldGroup); gridBuild();
 }else if(name==='realcity'){ // REALCITY — REAL-WORLD-DATA CITY MAP built from warzone_city.glb (Blender export)
   buildRealCity();
+ }else if(name==='school'){ // SOS CAMPUS — school map built from sos_technical_school_v3.glb (trimesh export)
+  buildSchool();
 }else if(name==='killhouse'){ // KILLHOUSE — CQB PVP arena: the image map, one huge enclosed hall
   buildKillhouse();
  }else if(name==='camp'){ // CAMP ALPHA — remote training base, nothing else out here but hills
@@ -1725,16 +1847,28 @@ function riverGuard(p){if(drive||mapName==='camp')return;
  if(p.z<RIV_Z1-1&&p.z>RIV_Z0-2&&Math.abs(p.x-BOAT_X)>3){p.z=RIV_Z1-1;p.z=cl(p.z,RIV_Z1-1,ZB1-2)}
  if(p.z<LKZ1+1&&p.z>LKZ0-1)p.z=p.z>(LKZ0+LKZ1)/2?LKZ1+1:LKZ0-1; // deep lake: no wading across
  [LK1,LK2].forEach(k=>{const dx=p.x-k[0],dz=p.z-k[1],d=Math.hypot(dx,dz);if(d<k[2]+1&&d>.01){const s=(k[2]+1)/d;p.x=k[0]+dx*s;p.z=k[1]+dz*s}})}
-function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:{x:60,z:20}}
+function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:mapName==='school'?{x:8,z:50}:{x:60,z:20}}
 /* squad + bots */
-function mkChar(d,x,z,c){const g=human(d);S.add(g);return{g,x,z,y:support(x,z,0),vy:0,ground:1,r:0,t:0,v:0,c,hp:100,cd:0}}
+function mkChar(d,x,z,c){const g=human(d);const sk=skinMixer(g);if(sk){
+  /* skinned body replaces the procedural look: hide every procedural mesh, then carry
+     the procedural rifle on the skinned hand (barrel along the bone: rot.x=-90°).
+     The hidden procedural 'Weapon' group stays in the graph so muz()/tracers keep working. */
+  const mm={metal:new THREE.MeshStandardMaterial({color:0x1e2124,roughness:.4,metalness:.6}),
+   dark:new THREE.MeshStandardMaterial({color:0x0a0a0a,roughness:.5}),
+   gear:new THREE.MeshStandardMaterial({color:0x66605a,roughness:.8}),
+   wood:new THREE.MeshStandardMaterial({color:d.gun==='ak'?0x6a4322:0x26282b,roughness:.7})};
+  const wp2=gun(d.gun,mm);wp2.rotation.x=-Math.PI/2;wp2.position.set(0,.03,0);
+  const hand=sk.getObjectByName('hand.R')||sk.getObjectByName('hand.L');
+  if(hand)hand.add(wp2);else g.add(wp2);
+  g.traverse(o=>{if(o.isMesh)o.visible=false});
+  g.add(sk);g.userData.skinned=sk}
+ S.add(g);return{g,x,z,y:support(x,z,0),vy:0,ground:1,r:0,t:0,v:0,c,hp:100,cd:0}}
 function mover(c,dx,dz,sp,dt,jump){const n=Math.hypot(dx,dz);
  if(n<.05){c.v=0}else{dx/=n;dz/=n;
   const inR=inRiver(c.x,c.z),nx=c.x+dx*sp*(inR?.5:1)*dt,nz=c.z+dz*sp*(inR?.5:1)*dt;
   if((!blocked(nx,c.z,c.y,.6)||inR&&!blocked(nx,c.z,0,.3))&&!carBlock(nx,c.z,c.y,.6))c.x=cl(nx,XB0+2,XB1-2);
   if((!blocked(c.x,nz,c.y,.6)||inR&&!blocked(c.x,nz,0,.3))&&!carBlock(c.x,nz,c.y,.6))c.z=cl(nz,ZB0+2,ZB1-2);
-  let a=Math.atan2(dx,dz)-c.r;a=Math.atan2(Math.sin(a),Math.cos(a));c.r+=a*Math.min(1,dt*12);c.v=sp;c.t+=dt*sp*1.05}
- const gy=support(c.x,c.z,c.y);
+  let a=Math.atan2(dx,dz)-c.r;a=Math.atan2(Math.sin(a),Math.cos(a));c.r+=a*Math.min(1,dt*12);c.v=sp;c.t+=dt*sp*1.05}  let gy=support(c.x,c.z,c.y);
  if(inRiver(c.x,c.z))gy=Math.max(gy,RIV_Z0-3);
  if(c.ground){if(gy<c.y-.31){c.ground=0;c.vy=0}else{c.y=gy;if(jump){c.vy=6.4;c.ground=0}}}
  if(!c.ground){c.vy-=15*dt;c.y+=c.vy*dt;let g2=support(c.x,c.z,c.y);if(inRiver(c.x,c.z))g2=Math.max(g2,RIV_Z0-3);if(c.y<=g2){if(c.vy<-6.5)c.land=Math.min(.18,-c.vy*.016);c.y=g2;c.vy=0;c.ground=1}}}
@@ -2019,8 +2153,9 @@ $('btnSingle').onclick=()=>showSub(`
  <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Pick a map, then deploy:</div>
  <div class="mrow"><button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
  <button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button></div>
- <div class="mrow"><button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button>
- <button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapSchool" style="border-color:#6aa8a0">SOS CAMPUS<small>school map — close quarters</small></button>
+ <button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
  <button class="mbtn" id="singleGo" style="border-color:#9fc0da;text-align:center">DEPLOY<small>start on the selected map</small></button>`);
 $('btnLan').onclick=()=>showSub(`
  <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Host runs <b>lan_server.js</b>. Same PC: leave address blank. Other PCs: type the host IP below (e.g. 10.15.4.27:8080).</div>
@@ -2030,12 +2165,13 @@ $('btnLan').onclick=()=>showSub(`
  <div class="mrow">
   <button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
   <button class="mbtn" id="mapKillhouse" style="border-color:#c96a5a">KILLHOUSE<small>CQB arena — image map</small></button></div>
- <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapSchool" style="border-color:#6aa8a0">SOS CAMPUS<small>school map</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
  <div class="mrow"><button class="mbtn" id="lanCoop">CO-OP<small>fight bots together</small></button><button class="mbtn" id="lanFFA">DEATHMATCH<small>everyone vs everyone</small></button></div>
  <div style="text-align:center;color:#62778a;font-size:11px;margin-top:6px" id="lanHint">Pick a map, then choose a mode to connect</div>`);
 function wireMapButtons(){
  const wire=(id,name)=>{const b=$(id);if(!b)return;b.className='mbtn'+(mapName===name?' on':'');b.onclick=()=>{mapName=name;wireMapButtons()}};
- wire('mapCompound','compound');wire('mapKillhouse','killhouse');wire('mapRealCity','realcity');wire('mapOutskirts','outskirts');wire('mapBlackout','blackout')}
+ wire('mapCompound','compound');wire('mapKillhouse','killhouse');wire('mapRealCity','realcity');wire('mapSchool','school');wire('mapOutskirts','outskirts');wire('mapBlackout','blackout')}
 wireMapButtons();
 function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>startCampaign(+b.dataset.m));wireMapButtons();
  const sg=$('singleGo');if(sg)sg.onclick=()=>startGame(MODES.SINGLE,mapName==='killhouse'?'compound':mapName);
@@ -2045,7 +2181,7 @@ function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>
   msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};setTimeout(()=>{try{w3.close()}catch(e){}},15000)}catch(e){}};
   oc.onclick=()=>onStart('coop');of.onclick=()=>onStart('ffa')}}
 function lanStart(role,quick){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim():'';lanName=$('inName')?($('inName').value.trim()||'Operator'):'Operator';
- if($('mapKillhouse')&&['killhouse','compound','realcity','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
+ if($('mapKillhouse')&&['killhouse','compound','realcity','school','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
  const ih=$('inHost')?$('inHost').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';
  const a=ih||($('inAddr')?$('inAddr').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'');lanAddr=a;
  const base=a?(location.protocol==='https:'?'https://':'http://')+a:'';
@@ -2074,8 +2210,8 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  /* desktop: hide touch buttons (FIRE/JUMP/…) + weapon bar for a clean CoD-style HUD; mobile keeps them */
  const isTouch=('ontouchstart'in window)||(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0);
  if(!isTouch){$('ctl').style.display='none';$('sw').style.display='none'}
- $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':'Blackout — Port';
- $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':'Open warfare zone — clear hostiles, grab a car (E)';
+ $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':map==='school'?'SOS CAMPUS — School Raid':'Blackout — Port';
+ $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':map==='school'?'School campus mesh — dorms, classrooms, dining hall · climb to the roofs':'Open warfare zone — clear hostiles, grab a car (E)';
  if(mode===MODES.CAMPAIGN){const ms=CAMPAIGN[mission];note(ms.title+' — '+ms.brief,6);missionState=ms.setup();if(mission!==0)riverGuard(C[act])}
  else if(mode===MODES.TRAIN){ // pure training on its own CAMP map: no hostiles anywhere
   bots.length=0;trainReset();
@@ -2085,12 +2221,13 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  }
  else if(mode===MODES.SINGLE){  const areas=map==='compound'?[[36,73,12,34],[96,139,12,37],[8,34,43,69],[167,200,25,81],[32,72,79,102],[65,85,159,183],[99,121,201,225],[131,149,201,225],[28,62,-318,-282],[128,164,-320,-286],[126,158,-236,-206],[178,206,-282,-254],[64,100,-206,-178],[-138,-116,-344,-308],[-92,-70,-344,-308],[-138,-116,-292,-244],[-44,-10,-344,-310],[6,42,-292,-244],[66,124,-330,-286],[104,128,-334,-290],[66,124,-276,-234],[146,168,-276,-234],[64,118,-226,-184],[148,168,-226,-184],[-46,-8,-234,-190],[-148,-62,-380,-362],[-32,54,-380,-362],[86,122,-380,-362],[186,282,-318,-166]]:
   map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59],[171,195,101,129],[25,53,151,177],[121,149,151,179],[181,209,181,209]]:
+  map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:
   [[21,79,31,69],[111,169,31,69],[31,89,111,149],[151,199,111,149],[110,150,190,215],[110,150,190,215]];
   const labels=map==='compound'?['Compound Patrol','Warehouse Crew','West Guard','East Sniper','South Guard','City Guard','City Watch','Riverside Patrol','Rubble Squad','North Watch','Highway Crew','East Ruin Post','Plaza Guard','Dock Workers','Pier Crew','Industrial Guard','Waterfront Watch','Harbor Patrol','Tower 1 Security','Tower 2 Security','Downtown Guard','Delta Squad','Street Gang','Residential Watch','Park Rangers','Echo Garrison','Quay Guard','City Militia','Sector C']:map==='outskirts'?['Farm Guard','Barn Crew','South Post','East Guard','Farm 2','Grain Guard','Depot Watch']:['Docks Guard','Warehouse Crew','Yard Crew','North Watch','Container Watch','Pier Guard'];
   areas.forEach((q,i)=>{spawnBots([[q[0],q[1],q[2],q[3]]],.15);labelAreas([q],labels[i]||'Hostile')});
   objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}
  else{ // LAN / ONLINE
-  const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
+  const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
   areas.forEach((q,i)=>{spawnBots([q],0);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant');const bb=bots[bots.length-1];if(bb&&mapName==='killhouse'){bb.home=[q[0]-2.5,q[0]+2.5,q[2]-2.5,q[2]+2.5];bb.cd=1+i*.5;bb.cd0=1.3+rnd()*.8}});
   if(lanRole==='coop')objText((onlineMode?'ONLINE CO-OP':'CO-OP')+' — clear zones with your team · T = chat');
   else objText((onlineMode?'ONLINE DEATHMATCH':'DEATHMATCH')+' — first to 15 kills · T = chat');
@@ -2143,8 +2280,7 @@ function mini(){mcx.fillStyle=mapName==='compound'?'#101814':mapName==='killhous
   mcx.fillStyle='#8a3a30';mcx.fillRect(kx(100.6),kz(72.6),5,4);mcx.fillStyle='#38607e';mcx.fillRect(kx(105.6),kz(76),5,4);
   mcx.fillStyle='#6b4a32';[[12.6,31.6],[105.6,31.6],[198.6,31.6],[12.6,119.6],[105.6,119.6],[198.6,119.6]].forEach(t=>mcx.fillRect(kx(t[0])-1.5,kz(t[1])-1.5,3,3))}
  else{
- mcx.fillStyle='#34363b';mcx.fillRect(mx(0),mz(0),W/(XB1-XB0)*176,D/(ZB1-ZB0)*96);
- const bl=mapName==='compound'?BCompound:mapName==='outskirts'?BOutsk:mapName==='realcity'?REAL_BL:[];
+ mcx.fillStyle='#34363b';mcx.fillRect(mx(0),mz(0),W/(XB1-XB0)*176,D/(ZB1-ZB0)*96);  const bl=mapName==='compound'?BCompound:mapName==='outskirts'?BOutsk:(mapName==='realcity'||mapName==='school')?REAL_BL:[];
  mcx.fillStyle='#585c64';bl.forEach(b=>mcx.fillRect(mx(b[0]),mz(b[2]),(b[1]-b[0])/(XB1-XB0)*260,(b[3]-b[2])/(ZB1-ZB0)*128));
  if(mapName==='compound'){mcx.fillStyle='rgba(24,34,56,.9)';mcx.fillRect(0,mz(RIV_Z0),260,(RIV_Z1-RIV_Z0)/(ZB1-ZB0)*128);
   mcx.fillStyle='#46484e';
@@ -2169,6 +2305,7 @@ const vmList=CHARS.map(d=>{const mk=k=>{const g=gun(k,{metal:vmM(0x1e2124,.4,.6)
 let last=performance.now();
 (function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1e3);last=now;
  if(!running){R.render(S,cam);return}
+ C.forEach(c=>{if(c.mix)c.mix.m.update(dt)});
  const p=C[act];let ix=(K.KeyD||K.ArrowRight?1:0)-(K.KeyA||K.ArrowLeft?1:0),iz=(K.KeyW||K.ArrowUp?1:0)-(K.KeyS||K.ArrowDown?1:0);
  if(stick){ix+=stick.dx;iz-=stick.dy}
  const fx=-Math.sin(yaw),fz=-Math.cos(yaw);
@@ -2207,7 +2344,7 @@ let last=performance.now();
   else{ // no contact: sweep toward the player's forward axis, spread out, take posts near objectives
    o.tgt=null;const side=(i===1?-9:9),tx=home.x+fx*10+fz*side,tz=home.z+fz*10-fx*side;
    if(Math.hypot(tx-o.x,tz-o.z)>3)mover(o,tx-o.x,tz-o.z,Math.min(9,5+dd*.3),dt);else o.v=0}
-  anim(o.g,o.t,o.v);o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.r});
+  if(o.g.userData.skinned){o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.r}else{anim(o.g,o.t,o.v);o.g.position.set(o.x,o.y,o.z);o.g.rotation.y=o.r}});
  const wd=WPNS[curW],wAm=wstate[curW];
  H.cd-=dt;const want=!drive&&(K.KeyF||fb.on||H.tap>0);H.tap=Math.max(0,H.tap-dt);
  if(H.rl>0){H.rl-=dt;if(H.rl<=0){const n=Math.min(wd.mag-wAm.am,wAm.rs);wAm.am+=n;wAm.rs-=n}}
