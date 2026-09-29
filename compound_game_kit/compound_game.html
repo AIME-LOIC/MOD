@@ -1887,8 +1887,13 @@ function anim(g,t,v){const j=g.userData.j,r=v>7,p=v?walkPose(t,r):{L:0,R:0,kL:0,
  j.Hips.position.y=.935-p.b;j.Spine.rotation.x=v?(r?.12:.05):0}
 /* ============================================================ GAME STATE */
 const MODES={MENU:0,CAMPAIGN:1,SINGLE:2,LAN:3,TRAIN:4};
-/* DUEL 1v1 state: first to 5 PvP kills; foe name arrives via pjoin (maxPlayers=2 room) */
-const DUEL={kills:0,deaths:0,foe:null,over:0,botsOn:0};
+/* DUEL 1v1 state: players only (no bots, no squadmates), first to 5 PvP kills.
+   If the rival leaves, the duel is VOID — no victory for anyone until they rejoin. */
+const DUEL={kills:0,deaths:0,foe:null,over:0,void:0};
+function duelWinCheck(){if(mode!==MODES.LAN||lanRole!=='duel')return;
+ DUEL.kills=H.kl;
+ if(H.kl>=5&&!DUEL.over&&DUEL.foe&&!DUEL.void){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName}});
+  showStat('VICTORY',`<b>${lanName} wins the duel 5–${DUEL.deaths}!</b>`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
 let mode=MODES.MENU,mission=0,mapName='compound',lanRoom='',lanName='Operator',lanRole='coop',onlineMode=0;
 let running=false;
 const H={hp:100,am:30,rs:90,gr:3,rl:0,cd:0,kl:0,msg:0,hurt:0,tap:0,calm:0,ads:0,jumpReq:0,flash:0,hs:0,kick:0,hm:0,note:0,driveInv:0,st:100,stp:.7};
@@ -1953,7 +1958,7 @@ function stepGrenades(dt){for(let i=grenades.length;i--;){const g2=grenades[i];g
   S.remove(g2.m);const fi=FX.findIndex(f=>f.m===g2.m);if(fi>=0)FX.splice(fi,1);grenades.splice(i,1)}}}
 function hurt(n){ if(mode===MODES.LAN&&lanRole!=='coop')n*=.8;H.hp-=n;H.hurt=.4;H.calm=0;H.st=Math.max(0,H.st-14);
  if(H.hp<=0){if(drive)exitCar();   if(mode===MODES.LAN){lanSend({t:'ev',k:'death'});if(lanRole==='duel'){DUEL.deaths++;
-    if(DUEL.deaths>=5&&!DUEL.over){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName+'_RIVAL'}});showStat('DEFEAT','<b>'+(DUEL.foe||'Your rival')+' wins the duel 5–'+DUEL.kills+'</b>','REMATCH',()=>{DUEL.deaths=0;DUEL.over=0;respawnAll();$('stat').style.display='none'})}}}
+    if(DUEL.foe&&!DUEL.void&&DUEL.deaths>=5&&!DUEL.over){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName+'_RIVAL'}});showStat('DEFEAT','<b>'+(DUEL.foe||'Your rival')+' wins the duel 5–'+DUEL.kills+'</b>','REMATCH',()=>{DUEL.deaths=0;DUEL.over=0;respawnAll();$('stat').style.display='none'})}}}
    respawnAll();H.hp=100;wstate.rifle.am=30;wstate.rifle.rs=Math.max(wstate.rifle.rs,60);wstate.pistol.am=36;switchW('rifle');H.gr=mapName==='camp'?8:3;H.msg=2.5}}
 function respawnAll(){C.forEach((c,i)=>{const sp=spawnPoint();c.x=sp.x+RR(-3,3);c.z=sp.z+RR(-3,3);c.y=support(c.x,c.z,0);c.vy=0;c.ground=1;c.hp=100})}
 function riverGuard(p){/* swimmers now: deep water is handled by buoyancy in mover() — old invisible walls removed */}
@@ -2010,16 +2015,14 @@ function dogAI(b,dt,p){
  /* gallop pose */
  const ph=b.t*2.6;b.legs.forEach((l,i)=>{l.rotation.x=Math.sin(ph+(i%2?Math.PI:0)+(i>1?.6:0))*.8});
  b.g.position.set(b.x,b.y,b.z);b.g.rotation.y=b.r}
+function botLabel(b){return HOSTILES[hk(b.home)]||'Enemy'}
 function killBot(i,hs,by){const b=bots[i];if(!b||b.dead)return;
  if(b.friend){b.dead=999;killfeed('YOU','INFORMANT','FRIENDLY FIRE');return}
  b.dead=6;H.kl++;wstate.rifle.rs=Math.min(150,wstate.rifle.rs+10);wstate.pistol.rs=Math.min(180,wstate.pistol.rs+4);
  if(b.dog){b.g.rotation.x=-1.4;killfeed(by||'YOU','WAR DOG',hs?'HEADSHOT':'');if(hs)H.hs=1;return}
- killfeed(by||'YOU',botLabel(b),hs?'HEADSHOT':'');if(hs)H.hs=1;  if(mode===MODES.LAN)lanSend({t:'ev',k:'kill',a:{a:lanName,b:botLabel(b),tag:hs?'HS':''}}); // deaths vs bots are self-scored by each client below
-  if(mode===MODES.LAN&&lanRole==='duel'){DUEL.kills=H.kl;
-   if(H.kl>=5&&!DUEL.over){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName}});
-    showStat('VICTORY',`<b>${lanName} wins the duel 5–${DUEL.deaths}!</b>`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
-  else if(mode===MODES.LAN&&lanRole==='ffa'&&H.kl>=15){lanSend({t:'ev',k:'win',a:{w:lanName}});showStat('VICTORY',`<b>${lanName} wins!</b><br>Kills: ${H.kl}`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
-function botLabel(b){return HOSTILES[hk(b.home)]||'Enemy'}
+ killfeed(by||'YOU',botLabel(b),hs?'HEADSHOT':'');if(hs)H.hs=1;
+ if(mode===MODES.LAN)lanSend({t:'ev',k:'kill',a:{a:lanName,b:botLabel(b),tag:hs?'HS':''}}); // deaths vs bots are self-scored by each client below
+ if(mode===MODES.LAN&&lanRole==='ffa'&&H.kl>=15){lanSend({t:'ev',k:'win',a:{w:lanName}});showStat('VICTORY',`<b>${lanName} wins!</b><br>Kills: ${H.kl}`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
 function botAI(b,dt,p){
  if(b.dog)return dogAI(b,dt,p);
  if(b.friend){if(b.dead>0)return}
@@ -2064,7 +2067,7 @@ function shoot(ch,fx_,fz_){ const isP=ch===C[act],W2=WPNS[curW],pistolMode=curW=
    pHit.hp-=hs2?999:(sn2?85:W2.dmg);
    if(pHit.hp<=0&&!pHit.deadP){pHit.deadP=1;killfeed(lanName,pHit.netName||'PLAYER',hs2?'HEADSHOT':'');
     H.kl++;lanSend({t:'ev',k:'kill',a:{a:lanName,b:pHit.netName||'PLAYER',tag:hs2?'HS':'',vid:pHit.netId}});
-    H.st=Math.min(100,H.st+30);H.hp=Math.min(100,H.hp+25);if(pHit.hp<=-200)pHit.hp=100}}}
+    H.st=Math.min(100,H.st+30);H.hp=Math.min(100,H.hp+25);if(pHit.hp<=-200)pHit.hp=100;duelWinCheck()}}}
  if(isP){for(let ti=targs.length;ti--;){const t2=targs[ti];if(!t2.up||!t2.drone)continue;
   const rx=t2.x-ch.x,rz=t2.z-ch.z,ry=t2.y===undefined?t2.alt:t2.y;if(ry===undefined)continue;
   const pr=rx*ux+rz*uz;if(pr<0||pr>t)continue;const q=Math.hypot(rx-pr*ux,rz-pr*uz);
@@ -2238,9 +2241,10 @@ function lanConnect(room,role,cb,attempt){const att=attempt||0;
  sock.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(err){return}
   if(m.t==='welcome'){note('Connected to '+(m.quick?'QUICK MATCH — ':'room "'+m.room+'" — ')+m.players.length+' player(s)',3);if(m.lb)lbShow(m.lb);
    const hh=$('onHint');if(hh){hh.textContent='CONNECTED — '+(m.quick?'quick match':'room "'+m.room+'"')+' · '+(m.players?m.players.length:1)+' player(s)';hh.style.color='#9fd9a0';setTimeout(()=>{if(hh.textContent.indexOf('CONNECTED')===0){hh.textContent='In match. T = chat · Tab = leaderboard';hh.style.color='#62778a'}},6000)}}
-  else if(m.t==='pjoin'){note(m.name+' joined the room',2.5);if(lanRole==='duel'){DUEL.foe=m.name;DUEL.deaths=0;DUEL.over=0;
-   if(DUEL.botsOn){bots.forEach(b=>killBot(bots.indexOf(b),false));DUEL.botsOn=0}note('DUEL vs '+m.name+' — first to 5!',3)}}
-  else if(m.t==='pleave'){const peer=lanPeers.get(m.id);if(peer){S.remove(peer.g);lanPeers.delete(m.id);note((m.name||'A player')+' left',2)}}
+  else if(m.t==='pjoin'){note(m.name+' joined the room',2.5);if(lanRole==='duel'){DUEL.foe=m.name;DUEL.deaths=0;DUEL.over=0;DUEL.void=0;H.kl=0;DUEL.kills=0;
+   note('DUEL vs '+m.name+' — first to 5!',3)}}
+  else if(m.t==='pleave'){const peer=lanPeers.get(m.id);if(peer){S.remove(peer.g);lanPeers.delete(m.id);note((m.name||'A player')+' left',2)}
+   if(mode===MODES.LAN&&lanRole==='duel'&&!DUEL.over){DUEL.foe=null;DUEL.void=1;note('Your rival left — duel void. No winner. Waiting for a rejoin…',4)}}
   else if(m.t==='err'){note(m.e||'Server error',4);if(!m.keep){if(ws){ws.close();ws=null}showMenu()}}
   else if(m.t==='chat'){chatAdd(m.name,m.m)}
   else if(m.t==='rooms'){const el=$('roomList');if(el)el.innerHTML=m.rooms.length?m.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet — host one below and it appears here.</div>',msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}
@@ -2379,15 +2383,14 @@ function startGame(m,map){mode=m;mapName=map;running=true;
   objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}  else{ // LAN / ONLINE
    if(mapName==='downtown'&&!lanDuelMaps().includes('downtown')){} // (all maps allowed for duels)
    const duel=lanRole==='duel';
-   if(duel){ // 1v1: wait-friendly warm-up bots until the rival joins
-    DUEL.kills=0;DUEL.deaths=0;DUEL.foe=null;DUEL.over=0;
-    const wz=mapName==='killhouse'?killSpawns.slice(0,4).map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):
-     mapName==='school'?[[44,64,46,58],[-12,16,36,58],[-12,60,-108,-34]]:
-     mapName==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64]]:
-     mapName==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[14,-62,14,-42]]:
-     [[36,73,12,34],[167,200,25,81],[28,62,-318,-282]];
-    wz.forEach(q=>{spawnBots([q],.15)});DUEL.botsOn=1;
-    objText('DUEL — warm-up while your rival connects · first to 5 kills');
+   if(duel){ // 1v1: PLAYERS ONLY — no bots, no squadmates, nothing else in the room
+    DUEL.kills=0;DUEL.deaths=0;DUEL.foe=null;DUEL.over=0;DUEL.void=0;
+    bots.length=0;
+    while(C.length){S.remove(C.pop().g)} // squad stays home: pure 1v1
+    C.push(mkChar(CHARS[0],sp.x,sp.z,'#7bd35a'));act=0;
+    ['b0','b1','b2','b3'].forEach((id,k)=>{const b=document.getElementById(id);if(b)b.className=k===0?'on':''});
+    if(CHARS[0]&&CHARS[0].gun==='sr')wstate.rifle.rs=Math.max(wstate.rifle.rs,150);
+    objText('1v1 DUEL — waiting for your rival… first to 5 kills');
     lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)});
     note('DEPLOYED — good luck, operator.',2.5);snd(.3,.2);return}
    const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
