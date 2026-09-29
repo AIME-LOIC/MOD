@@ -102,7 +102,8 @@ const inRiver=(x,z)=>{if(z>RIV_Z0-1&&z<RIV_Z1+1)return 1;
    cars that sink, grenades that splash in and fizzle (dud underwater). */
 const WATER=[];
 function waterAt(x,z,y){for(let i=WATER.length;i--;){const w=WATER[i];
- if(x>w.x0&&x<w.x1&&z>w.z0&&z<w.z1&&y>w.y-.7&&y<w.y+2.2)return w}return null}
+ if(w.deep===undefined)w.deep=(w.y-w.bed)>1.15;
+ if(x>w.x0&&x<w.x1&&z>w.z0&&z<w.z1&&y>w.bed-1.5&&y<w.y+2.2)return w}return null}
 function swimState(p){const w=p&&waterAt(p.x,p.z,p.y);if(!w||!w.deep)return null;
  return {w,depth:w.y-p.y,surf:w.y}} // deep zones only: you swim or you stand on the bed
 function floorBelow(x,z,y,w){return w.bed} // true bed of the zone (terrain sheets never mask it)
