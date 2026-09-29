@@ -208,18 +208,19 @@ server.on('upgrade', (req, socket) => {
         pl.id = (typeof m.pid === 'string' && m.pid.length <= 32 && /^[\w-]+$/.test(m.pid)) ? m.pid : pl.id;
         let rname, map = String(m.map || 'compound').slice(0, 16), mode = String(m.mode || 'coop').slice(0, 10);
         const quick = m.quick === true || m.quick === 1 || m.quick === '1' || m.quick === 'true'; // tolerate numeric/string quick flags from clients
+        const cap = mode === 'duel' ? 2 : Math.max(2, Math.min(MAX_PLAYERS, m.maxPlayers || MAX_PLAYERS)); // duels: exactly 2 players
         if (quick) { // QUICK MATCH: fullest public room with space, else new room
           let best = null;
           state.rooms.forEach(r => { if (r.pub && r.players.size < r.max) { if (m.mode && r.mode !== m.mode) return; if (!best || r.players.size > best.players.size) best = r; } });
           if (best) rname = best.name;
-          else { rname = (mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); mode = m.mode || 'coop'; }
+          else { rname = (mode === 'duel' ? 'duel-' : mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); mode = m.mode || 'coop'; }
         } else {
           rname = String(m.room || 'ops').replace(/[^\w-]/g, '').toLowerCase().slice(0, 20) || 'ops';
         }
-        let r = getRoom(rname, map, mode, quick ? true : m.pub !== false, m.maxPlayers);
+        let r = getRoom(rname, map, mode, quick ? true : m.pub !== false, cap);
         if (!r) { send({ t: 'err', e: 'Server full — try again later' }); return; }
         if (r.players.size >= r.max) {
-          if (quick) { rname = (mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); r = getRoom(rname, map, mode, true, m.maxPlayers); }
+          if (quick) { rname = (mode === 'duel' ? 'duel-' : mode === 'ffa' ? 'match-' : 'squad-') + roomCode(); r = getRoom(rname, map, mode, true, cap); }
           if (!r || r.players.size >= r.max) { send({ t: 'err', e: 'Room "' + rname + '" is full (' + r.max + ' players)' }); return; }
         }
         pl.room = r; pl.kills = 0; pl.deaths = 0;

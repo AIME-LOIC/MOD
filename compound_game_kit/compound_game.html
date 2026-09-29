@@ -62,8 +62,7 @@ button.on{opacity:1;font-weight:600;background:rgba(120,180,140,.18)}
   <button class="mbtn" id="btnLan">SERVER PLAY (LAN)<small>Co-op &amp; deathmatch on your network</small></button>
   </div>
   <div id="msubs"></div>
-  <button class="mbtn" id="back" style="display:none">← BACK</button>
-  <div id="mnote">WASD move · Shift sprint · Space jump · LMB fire · RMB aim/scope · R reload · G grenade · E drive / boat · 1/2/3 rifle/pistol/knife · 4 SNIPER (Hawkeye) · Tab squad</div>
+  <button class="mbtn" id="back" style="display:none">← BACK</button>   <div id="mnote">WASD move · Shift sprint · Space jump / swim · LMB fire · RMB aim/scope · R reload · G grenade · E drive / boat · 1/2/3 rifle/pistol/knife · 4 SNIPER · 5-8 squad · Tab squad cycle</div>
 </div>
 
 <div id="stat"><h2 id="stTitle"></h2><p id="stText"></p><button class="mbtn" id="stBtn" style="width:220px">CONTINUE</button></div>
@@ -1787,12 +1786,13 @@ function buildMap(name){
 const WPNS={
  rifle:{name:'M4 RIFLE',mag:30,dmg:20,cd:.11,cdA:.13,melee:0},
  pistol:{name:'M9 PISTOL',mag:12,dmg:26,cd:.26,cdA:.2,melee:0},
- knife:{name:'COMBAT KNIFE',mag:0,dmg:70,cd:.42,cdA:.34,melee:1}};
-const wstate={rifle:{am:30,rs:90},pistol:{am:36,rs:144},knife:{am:0,rs:0}};
+ knife:{name:'COMBAT KNIFE',mag:0,dmg:70,cd:.42,cdA:.34,melee:1},
+ sniper:{name:'AWM SNIPER',mag:5,dmg:110,cd:1.35,cdA:1.1,melee:0,scope:1,bolt:1}};
+const wstate={rifle:{am:30,rs:90},pistol:{am:36,rs:144},knife:{am:0,rs:0},sniper:{am:5,rs:25}};
 let curW='rifle';
 function switchW(w){if(curW===w||!WPNS[w])return;H.rl=0;H.cd=Math.max(H.cd,.2);curW=w;
  const we=$('wn');if(we)we.textContent=WPNS[w].name;note(WPNS[w].name,1.1);osc2('square',900,1400,.04,.06);
- ['b0','b1','b2'].forEach((id,k)=>{const b=document.getElementById(id);if(b)b.className=((k===0&&w==='rifle')||(k===1&&w==='pistol')||(k===2&&w==='knife'))?'on':''})}
+ ['b0','b1','b2','b4'].forEach((id,k)=>{const b=document.getElementById(id);if(b)b.className=((k===0&&w==='rifle')||(k===1&&w==='pistol')||(k===2&&w==='knife')||(k===3&&w==='sniper'))?'on':''})}
 function meleeHit(ch){const f=new THREE.Vector3();cam.getWorldDirection(f);let hitAny=0;
  bots.forEach(b=>{if(b.dead)return;const dx=b.x-ch.x,dz=b.z-ch.z,d=Math.hypot(dx,dz)||1;
   if(d<2.7&&(dx*f.x+dz*f.z)/d>.5&&Math.abs(b.y-ch.y)<2.2&&wall(ch.x,ch.z,dx/d,dz/d,d)>=d){
@@ -1887,6 +1887,8 @@ function anim(g,t,v){const j=g.userData.j,r=v>7,p=v?walkPose(t,r):{L:0,R:0,kL:0,
  j.Hips.position.y=.935-p.b;j.Spine.rotation.x=v?(r?.12:.05):0}
 /* ============================================================ GAME STATE */
 const MODES={MENU:0,CAMPAIGN:1,SINGLE:2,LAN:3,TRAIN:4};
+/* DUEL 1v1 state: first to 5 PvP kills; foe name arrives via pjoin (maxPlayers=2 room) */
+const DUEL={kills:0,deaths:0,foe:null,over:0,botsOn:0};
 let mode=MODES.MENU,mission=0,mapName='compound',lanRoom='',lanName='Operator',lanRole='coop',onlineMode=0;
 let running=false;
 const H={hp:100,am:30,rs:90,gr:3,rl:0,cd:0,kl:0,msg:0,hurt:0,tap:0,calm:0,ads:0,jumpReq:0,flash:0,hs:0,kick:0,hm:0,note:0,driveInv:0,st:100,stp:.7};
@@ -1950,7 +1952,9 @@ function stepGrenades(dt){for(let i=grenades.length;i--;){const g2=grenades[i];g
   if(uw)splash(g2.p.x,g2.p.y+.2,g2.p.z,1);else explode(g2.p.clone()); // soaked grenades fizzle out — dud underwater
   S.remove(g2.m);const fi=FX.findIndex(f=>f.m===g2.m);if(fi>=0)FX.splice(fi,1);grenades.splice(i,1)}}}
 function hurt(n){ if(mode===MODES.LAN&&lanRole!=='coop')n*=.8;H.hp-=n;H.hurt=.4;H.calm=0;H.st=Math.max(0,H.st-14);
- if(H.hp<=0){if(drive)exitCar();if(mode===MODES.LAN)lanSend({t:'ev',k:'death'});respawnAll();H.hp=100;wstate.rifle.am=30;wstate.rifle.rs=Math.max(wstate.rifle.rs,60);wstate.pistol.am=36;switchW('rifle');H.gr=mapName==='camp'?8:3;H.msg=2.5}}
+ if(H.hp<=0){if(drive)exitCar();   if(mode===MODES.LAN){lanSend({t:'ev',k:'death'});if(lanRole==='duel'){DUEL.deaths++;
+    if(DUEL.deaths>=5&&!DUEL.over){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName+'_RIVAL'}});showStat('DEFEAT','<b>'+(DUEL.foe||'Your rival')+' wins the duel 5–'+DUEL.kills+'</b>','REMATCH',()=>{DUEL.deaths=0;DUEL.over=0;respawnAll();$('stat').style.display='none'})}}}
+   respawnAll();H.hp=100;wstate.rifle.am=30;wstate.rifle.rs=Math.max(wstate.rifle.rs,60);wstate.pistol.am=36;switchW('rifle');H.gr=mapName==='camp'?8:3;H.msg=2.5}}
 function respawnAll(){C.forEach((c,i)=>{const sp=spawnPoint();c.x=sp.x+RR(-3,3);c.z=sp.z+RR(-3,3);c.y=support(c.x,c.z,0);c.vy=0;c.ground=1;c.hp=100})}
 function riverGuard(p){/* swimmers now: deep water is handled by buoyancy in mover() — old invisible walls removed */}
 function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:mapName==='school'?{x:8,z:50}:mapName==='downtown'?{x:0,z:58}:{x:60,z:20}}
@@ -2010,9 +2014,11 @@ function killBot(i,hs,by){const b=bots[i];if(!b||b.dead)return;
  if(b.friend){b.dead=999;killfeed('YOU','INFORMANT','FRIENDLY FIRE');return}
  b.dead=6;H.kl++;wstate.rifle.rs=Math.min(150,wstate.rifle.rs+10);wstate.pistol.rs=Math.min(180,wstate.pistol.rs+4);
  if(b.dog){b.g.rotation.x=-1.4;killfeed(by||'YOU','WAR DOG',hs?'HEADSHOT':'');if(hs)H.hs=1;return}
- killfeed(by||'YOU',botLabel(b),hs?'HEADSHOT':'');if(hs)H.hs=1;
- if(mode===MODES.LAN)lanSend({t:'ev',k:'kill',a:{a:lanName,b:botLabel(b),tag:hs?'HS':''}}); // deaths vs bots are self-scored by each client below
- if(mode===MODES.LAN&&lanRole==='ffa'&&H.kl>=15){lanSend({t:'ev',k:'win',a:{w:lanName}});showStat('VICTORY',`<b>${lanName} wins!</b><br>Kills: ${H.kl}`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
+ killfeed(by||'YOU',botLabel(b),hs?'HEADSHOT':'');if(hs)H.hs=1;  if(mode===MODES.LAN)lanSend({t:'ev',k:'kill',a:{a:lanName,b:botLabel(b),tag:hs?'HS':''}}); // deaths vs bots are self-scored by each client below
+  if(mode===MODES.LAN&&lanRole==='duel'){DUEL.kills=H.kl;
+   if(H.kl>=5&&!DUEL.over){DUEL.over=1;lanSend({t:'ev',k:'win',a:{w:lanName}});
+    showStat('VICTORY',`<b>${lanName} wins the duel 5–${DUEL.deaths}!</b>`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
+  else if(mode===MODES.LAN&&lanRole==='ffa'&&H.kl>=15){lanSend({t:'ev',k:'win',a:{w:lanName}});showStat('VICTORY',`<b>${lanName} wins!</b><br>Kills: ${H.kl}`,'BACK TO MENU',()=>{if(ws){ws.close();ws=null}lanPeers.forEach(p=>S.remove(p.g));lanPeers.clear();showMenu()})}}
 function botLabel(b){return HOSTILES[hk(b.home)]||'Enemy'}
 function botAI(b,dt,p){
  if(b.dog)return dogAI(b,dt,p);
@@ -2048,8 +2054,17 @@ function shoot(ch,fx_,fz_){ const isP=ch===C[act],W2=WPNS[curW],pistolMode=curW=
  if(isP){const smk=new THREE.Mesh(new THREE.SphereGeometry(.09,6,5),new THREE.MeshBasicMaterial({color:0x9aa0a6,transparent:true,opacity:.25,depthWrite:false}));smk.position.copy(m);S.add(smk);FX.push({m:smk,t:.3,grow:1})}
  else if(isP){for(let ci=cars.length;ci--;){const c2=cars[ci];if(c2===drive||c2.plane||c2.boat||c2.hp===undefined||c2.burnt)continue;
   const bx2=c2.cbox;if(e.x>bx2[0]-.2&&e.x<bx2[1]+.2&&e.z>bx2[2]-.2&&e.z<bx2[3]+.2&&e.y<(bx2[4]||1.8)+.6){
-   c2.hp-=W2.dmg;spark(e);if(c2.hp<=0){c2.burnt=1;torchCar(c2);note('VEHICLE DESTROYED',2);killfeed('YOU','VEHICLE','WRECKED')}}}}
- if(who){H.hm=.15;hitSnd();const hs=hy>who.y+1.52,sn=isP&&CHARS[act].gun==='sr';who.hp-=hs?999:(sn?85:W2.dmg);if(who.hp<=0)killBot(bots.indexOf(who),hs)}
+   c2.hp-=W2.dmg;spark(e);if(c2.hp<=0){c2.burnt=1;torchCar(c2);note('VEHICLE DESTROYED',2);killfeed('YOU','VEHICLE','WRECKED')}}}}  if(who){H.hm=.15;hitSnd();const hs=hy>who.y+1.52,sn=isP&&CHARS[act].gun==='sr';who.hp-=hs?999:(sn?85:W2.dmg);if(who.hp<=0)killBot(bots.indexOf(who),hs)}
+ /* PvP: shoot enemy players (duel / deathmatch) */
+ if(isP&&(mode===MODES.LAN&&lanRole!=='coop')){let pHit=null,pT=1e9,pHy=0;
+  lanPeers.forEach(pe=>{const dx=pe.x-ch.x,dz=pe.z-ch.z,pr=dx*ux+dz*uz;if(pr<=0||pr>=t)return;
+   const q=Math.hypot(dx-pr*ux,dz-pr*uz);if(q<.55){const k=pr-Math.sqrt(.3025-q*q),yy=y0+s*k;
+    if(k<t&&yy>pe.y&&yy<pe.y+1.9&&k<pT){pT=k;pHit=pe;pHy=yy}}});
+  if(pHit){H.hm=.15;hitSnd();const hs2=pHy>pHit.y+1.52,sn2=isP&&CHARS[act].gun==='sr';
+   pHit.hp-=hs2?999:(sn2?85:W2.dmg);
+   if(pHit.hp<=0&&!pHit.deadP){pHit.deadP=1;killfeed(lanName,pHit.netName||'PLAYER',hs2?'HEADSHOT':'');
+    H.kl++;lanSend({t:'ev',k:'kill',a:{a:lanName,b:pHit.netName||'PLAYER',tag:hs2?'HS':'',vid:pHit.netId}});
+    H.st=Math.min(100,H.st+30);H.hp=Math.min(100,H.hp+25);if(pHit.hp<=-200)pHit.hp=100}}}
  if(isP){for(let ti=targs.length;ti--;){const t2=targs[ti];if(!t2.up||!t2.drone)continue;
   const rx=t2.x-ch.x,rz=t2.z-ch.z,ry=t2.y===undefined?t2.alt:t2.y;if(ry===undefined)continue;
   const pr=rx*ux+rz*uz;if(pr<0||pr>t)continue;const q=Math.hypot(rx-pr*ux,rz-pr*uz);
@@ -2223,7 +2238,8 @@ function lanConnect(room,role,cb,attempt){const att=attempt||0;
  sock.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(err){return}
   if(m.t==='welcome'){note('Connected to '+(m.quick?'QUICK MATCH — ':'room "'+m.room+'" — ')+m.players.length+' player(s)',3);if(m.lb)lbShow(m.lb);
    const hh=$('onHint');if(hh){hh.textContent='CONNECTED — '+(m.quick?'quick match':'room "'+m.room+'"')+' · '+(m.players?m.players.length:1)+' player(s)';hh.style.color='#9fd9a0';setTimeout(()=>{if(hh.textContent.indexOf('CONNECTED')===0){hh.textContent='In match. T = chat · Tab = leaderboard';hh.style.color='#62778a'}},6000)}}
-  else if(m.t==='pjoin'){note(m.name+' joined the room',2.5)}
+  else if(m.t==='pjoin'){note(m.name+' joined the room',2.5);if(lanRole==='duel'){DUEL.foe=m.name;DUEL.deaths=0;DUEL.over=0;
+   if(DUEL.botsOn){bots.forEach(b=>killBot(bots.indexOf(b),false));DUEL.botsOn=0}note('DUEL vs '+m.name+' — first to 5!',3)}}
   else if(m.t==='pleave'){const peer=lanPeers.get(m.id);if(peer){S.remove(peer.g);lanPeers.delete(m.id);note((m.name||'A player')+' left',2)}}
   else if(m.t==='err'){note(m.e||'Server error',4);if(!m.keep){if(ws){ws.close();ws=null}showMenu()}}
   else if(m.t==='chat'){chatAdd(m.name,m.m)}
@@ -2270,11 +2286,12 @@ $('btnOnline').onclick=()=>{onlineMode=0;showSub(`
  <button class="mbtn" id="mapDowntown" style="border-color:#c9a75a">DOWNTOWN<small>GLB towers &amp; hotel</small></button>
  <button class="mbtn" id="mapKillhouse" style="border-color:#c96a5a">KILLHOUSE<small>CQB arena — image map</small></button></div>
  <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button></div>
- <div class="mrow"><button class="mbtn" id="onCoop">HOST CO-OP<small>fight bots together</small></button><button class="mbtn" id="onFFA">DEATHMATCH<small>first to 15</small></button></div>
+ <div class="mrow"><button class="mbtn" id="onCoop">HOST CO-OP<small>fight bots together</small></button><button class="mbtn" id="onFFA">DEATHMATCH<small>first to 15 · more enemies</small></button></div>
+ <div class="mrow"><button class="mbtn" id="onDuel" style="border-color:#e0a040">1 vs 1 DUEL<small>head-to-head · first to 5 · 2 players</small></button></div>
  <div style="text-align:center;color:#62778a;font-size:11px;margin-top:6px" id="onHint">Tip: pick a map + mode first, then QUICK MATCH. T = chat in game.</div>`);
  wireSubs();
  try{const w2=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(location.host||'localhost:8080')+'/ws');const q2=()=>{try{w2.send(JSON.stringify({t:'rooms'}))}catch(e){}};w2.onopen=q2;
-  w2.onmessage=e=>{let m2;try{m2=JSON.parse(e.data)}catch(err){return}if(m2.t==='rooms'){$('roomList').innerHTML=m2.rooms.length?m2.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet — host one below and it appears here.</div>';
+  w2.onmessage=e=>{let m2;try{m2=JSON.parse(e.data)}catch(err){return}if(m2.t==='rooms'){$('roomList').innerHTML=m2.rooms.length?m2.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='duel'?'1v1 DUEL':r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet — host one below and it appears here.</div>';
    msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};
   setTimeout(()=>{try{w2.close()}catch(e){}},15000)}catch(e){}};
 function onStart(role,quick){onlineMode=quick?1:0;lanStart(role,quick)}
@@ -2309,11 +2326,11 @@ function wireMapButtons(){
 wireMapButtons();
 function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>startCampaign(+b.dataset.m));wireMapButtons();
  const sg=$('singleGo');if(sg)sg.onclick=()=>startGame(MODES.SINGLE,mapName==='killhouse'?'compound':mapName);
- const lc=$('lanCoop'),lf=$('lanFFA');if(lc){lc.onclick=()=>lanStart('coop');lf.onclick=()=>lanStart('ffa')}
- const qc=$('onQuick'),br=$('onBrowse'),oc=$('onCoop'),of=$('onFFA');
- if(qc){qc.onclick=()=>onStart(lanRole||'coop',true);br.onclick=()=>{try{const w3=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(location.host||'localhost:8080')+'/ws');w3.onopen=()=>w3.send(JSON.stringify({t:'rooms'}));w3.onmessage=e=>{let m3;try{m3=JSON.parse(e.data)}catch(err){return}if(m3.t==='rooms'&&$('roomList')){$('roomList').innerHTML=m3.rooms.length?m3.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet.</div>';
+ const lc=$('lanCoop'),lf=$('lanFFA');if(lc){lc.onclick=()=>lanStart('coop');lf.onclick=()=>lanStart('ffa')}  const qc=$('onQuick'),br=$('onBrowse'),oc=$('onCoop'),of=$('onFFA'),od=$('onDuel');
+  if(qc){qc.onclick=()=>onStart(lanRole||'coop',true);br.onclick=()=>{try{const w3=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+(location.host||'localhost:8080')+'/ws');w3.onopen=()=>w3.send(JSON.stringify({t:'rooms'}));w3.onmessage=e=>{let m3;try{m3=JSON.parse(e.data)}catch(err){return}if(m3.t==='rooms'&&$('roomList')){$('roomList').innerHTML=m3.rooms.length?m3.rooms.map(r=>`<button class="mbtn" data-r="${r.name.replace(/"/g,'')}">${r.name} — ${r.mode==='ffa'?'DEATHMATCH':'CO-OP'}<small>${r.map} · ${r.n}/${r.max} players — click to join</small></button>`).join(''):'<div style="text-align:center;color:#62778a;font-size:12px;padding:8px">No public rooms yet.</div>';
   msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};setTimeout(()=>{try{w3.close()}catch(e){}},15000)}catch(e){}};
-  oc.onclick=()=>onStart('coop');of.onclick=()=>onStart('ffa')}}
+  oc.onclick=()=>onStart('coop');of.onclick=()=>onStart('ffa');if(od)od.onclick=()=>onStart('duel')}}
+function lanDuelMaps(){return ['compound','downtown','killhouse','realcity','school','outskirts','blackout']}
 function lanStart(role,quick){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim():'';lanName=$('inName')?($('inName').value.trim()||'Operator'):'Operator';
  if($('mapKillhouse')&&['killhouse','compound','realcity','school','downtown','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
  const ih=$('inHost')?$('inHost').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';
@@ -2359,13 +2376,27 @@ function startGame(m,map){mode=m;mapName=map;running=true;
   [[21,79,31,69],[111,169,31,69],[31,89,111,149],[151,199,111,149],[110,150,190,215],[110,150,190,215]];
   const labels=map==='compound'?['Compound Patrol','Warehouse Crew','West Guard','East Sniper','South Guard','City Guard','City Watch','Riverside Patrol','Rubble Squad','North Watch','Highway Crew','East Ruin Post','Plaza Guard','Dock Workers','Pier Crew','Industrial Guard','Waterfront Watch','Harbor Patrol','Tower 1 Security','Tower 2 Security','Downtown Guard','Delta Squad','Street Gang','Residential Watch','Park Rangers','Echo Garrison','Quay Guard','City Militia','Sector C']:map==='outskirts'?['Farm Guard','Barn Crew','South Post','East Guard','Farm 2','Grain Guard','Depot Watch']:['Docks Guard','Warehouse Crew','Yard Crew','North Watch','Container Watch','Pier Guard'];
   areas.forEach((q,i)=>{spawnBots([[q[0],q[1],q[2],q[3]]],.15);labelAreas([q],labels[i]||'Hostile')});
-  objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}
- else{ // LAN / ONLINE
-  const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
-  areas.forEach((q,i)=>{spawnBots([q],0);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant');const bb=bots[bots.length-1];if(bb&&mapName==='killhouse'){bb.home=[q[0]-2.5,q[0]+2.5,q[2]-2.5,q[2]+2.5];bb.cd=1+i*.5;bb.cd0=1.3+rnd()*.8}});
-  if(lanRole==='coop')objText((onlineMode?'ONLINE CO-OP':'CO-OP')+' — clear zones with your team · T = chat');
-  else objText((onlineMode?'ONLINE DEATHMATCH':'DEATHMATCH')+' — first to 15 kills · T = chat');
-  lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)})}
+  objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}  else{ // LAN / ONLINE
+   if(mapName==='downtown'&&!lanDuelMaps().includes('downtown')){} // (all maps allowed for duels)
+   const duel=lanRole==='duel';
+   if(duel){ // 1v1: wait-friendly warm-up bots until the rival joins
+    DUEL.kills=0;DUEL.deaths=0;DUEL.foe=null;DUEL.over=0;
+    const wz=mapName==='killhouse'?killSpawns.slice(0,4).map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):
+     mapName==='school'?[[44,64,46,58],[-12,16,36,58],[-12,60,-108,-34]]:
+     mapName==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64]]:
+     mapName==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[14,-62,14,-42]]:
+     [[36,73,12,34],[167,200,25,81],[28,62,-318,-282]];
+    wz.forEach(q=>{spawnBots([q],.15)});DUEL.botsOn=1;
+    objText('DUEL — warm-up while your rival connects · first to 5 kills');
+    lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)});
+    note('DEPLOYED — good luck, operator.',2.5);snd(.3,.2);return}
+   const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
+   /* deathmatch gets a bigger bot crowd to fight alongside/against the players */
+   const dmExtra=lanRole==='ffa'&&map==='downtown'?[[-58,38,-44,54],[44,38,58,54]]:[];
+   areas.concat(dmExtra).forEach((q,i)=>{spawnBots([q],0);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant');const bb=bots[bots.length-1];if(bb&&mapName==='killhouse'){bb.home=[q[0]-2.5,q[0]+2.5,q[2]-2.5,q[2]+2.5];bb.cd=1+i*.5;bb.cd0=1.3+rnd()*.8}});
+   if(lanRole==='coop')objText((onlineMode?'ONLINE CO-OP':'CO-OP')+' — clear zones with your team · T = chat');
+   else objText((onlineMode?'ONLINE DEATHMATCH':'DEATHMATCH')+' — first to 15 kills · T = chat');
+   lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)})}
  note('DEPLOYED — good luck, operator.',2.5);snd(.3,.2)}
 $('stBtn').onclick=()=>{$('stat').style.display='none';showMenu()};
 function missionEnd(win){running=false;
@@ -2377,7 +2408,8 @@ function showMenu(){running=false;mode=MODES.MENU;$('menu').style.display='flex'
 const K={};let stick=null,drag=null;
 addEventListener('keydown',e=>{K[e.code]=1;if(e.code==='Space')e.preventDefault();
  if(e.code==='Digit1'||e.code==='Numpad1')switchW('rifle');if(e.code==='Digit2'||e.code==='Numpad2')switchW('pistol');if(e.code==='Digit3'||e.code==='Numpad3')switchW('knife');
- if(e.code==='Digit4'||e.code==='Numpad4')pick(0);if(e.code==='Digit5'||e.code==='Numpad5')pick(1);if(e.code==='Digit6'||e.code==='Numpad6')pick(2);if(e.code==='Digit7'||e.code==='Numpad7')pick(3);if(e.code==='Tab'){e.preventDefault();pick((act+1)%4)}
+ if(e.code==='Digit4'||e.code==='Numpad4')switchW('sniper'); /* sniper = weapon slot 4 */
+ if(e.code==='Digit5'||e.code==='Numpad5')pick(0);if(e.code==='Digit6'||e.code==='Numpad6')pick(1);if(e.code==='Digit7'||e.code==='Numpad7')pick(2);if(e.code==='Digit8'||e.code==='Numpad8')pick(3);if(e.code==='Tab'){e.preventDefault();pick((act+1)%4)}
  if(e.code==='KeyE')tryCar();if(e.code==='KeyG')throwGrenade();
  if(e.code==='KeyX')switchW(curW==='pistol'?'rifle':'pistol');if(e.code==='KeyV')switchW(curW==='knife'?'rifle':'knife');
  if(e.code==='KeyT'&&mode===MODES.LAN&&running){e.preventDefault();chatPrompt()}});
@@ -2436,7 +2468,7 @@ const vmM=(c,r,m2)=>new THREE.MeshStandardMaterial({color:c,roughness:r,metalnes
 const vmList=CHARS.map(d=>{const mk=k=>{const g=gun(k,{metal:vmM(0x1e2124,.4,.6),gear:vmM(0x9a8a5c,.8,0),dark:vmM(0x0c0c0c,.5,0),wood:vmM(k==='ak'?0x6a4322:k==='knife'?0x4a3a26:0x26282b,.7,0)});
  const fl=new THREE.Mesh(new THREE.BoxGeometry(.1,.1,.1),new THREE.MeshBasicMaterial({color:0xffd070}));fl.position.set(0,.06,k==='ak'?.87:k==='pistol'?.22:.84);fl.visible=false;g.add(fl);g.userData.fl=fl;
  g.traverse(o=>o.castShadow=false);g.rotation.y=Math.PI;g.position.set(.17,-.22,-.42);cam.add(g);return g};
- return{rifle:mk(d.gun),pistol:mk('pistol'),knife:mk('knife')}});S.add(cam);
+ return{rifle:mk(d.gun),pistol:mk('pistol'),knife:mk('knife'),sniper:mk('sr')}});S.add(cam);
 let last=performance.now();
 (function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1e3);last=now;
  if(!running){R.render(S,cam);return}
@@ -2494,14 +2526,14 @@ let last=performance.now();
  const wd=WPNS[curW],wAm=wstate[curW];
  H.cd-=dt;const want=!drive&&(K.KeyF||fb.on||H.tap>0);H.tap=Math.max(0,H.tap-dt);
  if(H.rl>0){H.rl-=dt;if(H.rl<=0){const n=Math.min(wd.mag-wAm.am,wAm.rs);wAm.am+=n;wAm.rs-=n}}
- else if((K.KeyR||rb.on)&&!wd.melee&&wAm.am<wd.mag&&wAm.rs>0){H.rl=curW==='pistol'?1.2:1.6;reloadSnd()}
+ else if((K.KeyR||rb.on)&&!wd.melee&&wAm.am<wd.mag&&wAm.rs>0){H.rl=curW==='pistol'?1.2:curW==='sniper'?2.6:1.6;reloadSnd()}
  if(want){if(wd.melee){if(H.cd<=0&&H.rl<=0){H.cd=H.ads?wd.cdA:wd.cd;meleeHit(p)}}
   else if(H.cd<=0&&H.rl<=0&&wAm.am>0){const snp=CHARS[act].gun==='sr';H.cd=H.ads?(snp?.55:wd.cdA):(snp?.35:wd.cd);wAm.am--;shoot(p,fx,fz)}
-  else if(!wd.melee&&wAm.am<=0&&wAm.rs>0&&H.rl<=0){H.rl=curW==='pistol'?1.2:1.6;reloadSnd()}}
+  else if(!wd.melee&&wAm.am<=0&&wAm.rs>0&&H.rl<=0){H.rl=curW==='pistol'?1.2:curW==='sniper'?2.6:1.6;reloadSnd()}}
  if(mapName==='killhouse')ammoCrates.forEach(a=>{if(a.used){if((a.rt-=dt)<=0){a.used=0;a.box.visible=true}return}
   if(Math.hypot(p.x-a.x,p.z-a.z)<1.6&&Math.abs(p.y-a.y)<2.2){a.used=1;a.rt=25;a.box.visible=false;
-   wstate.rifle.rs=Math.min(150,wstate.rifle.rs+60);wstate.pistol.rs=Math.min(180,wstate.pistol.rs+48);H.gr=Math.min(4,H.gr+2);
-   note('AMMO RESUPPLY — rifle · pistol · grenades',1.6);osc2('square',700,1200,.08,.07)}});
+   wstate.rifle.rs=Math.min(150,wstate.rifle.rs+60);wstate.pistol.rs=Math.min(180,wstate.pistol.rs+48);wstate.sniper.rs=Math.min(40,wstate.sniper.rs+15);H.gr=Math.min(4,H.gr+2);
+   note('AMMO RESUPPLY — rifle · pistol · sniper · grenades',1.6);osc2('square',700,1200,.08,.07)}});
  bots.forEach(b=>botAI(b,dt,home));
  riverGuard(p);
  stepGrenades(dt);lanStep(dt);lanRemoteStep(dt);patrolStep(dt);jetsStep(dt);stepTargets(dt);trainStep();if(mapName==='camp')sandWind(dt);
@@ -2517,8 +2549,7 @@ let last=performance.now();
  H.calm+=dt;if(H.calm>5)H.hp=Math.min(100,H.hp+dt*8);H.hurt=Math.max(0,H.hurt-dt);H.msg=Math.max(0,H.msg-dt);H.note=Math.max(0,H.note-dt);
  if(H.note<=0)$('note').style.opacity=0;
  $('hurt').style.opacity=H.hurt*2;$('hp').textContent=Math.max(0,H.hp|0);$('am').textContent=H.rl>0?'…':wAm.am;$('rs').textContent=wd.melee?'∞':wAm.rs;$('gr').textContent=H.gr;$('kl').textContent=H.kl;$('msg').style.display=H.msg>0?'inline':'none';
- $('cmp').textContent=compass();
- $('scope').style.display=(H.ads&&curW==='rifle'&&CHARS[act].gun==='sr')?'block':'none';
+ $('cmp').textContent=compass();  $('scope').style.display=(H.ads&&(curW==='sniper'||(curW==='rifle'&&CHARS[act].gun==='sr')))?'block':'none';
  H.flash=Math.max(0,H.flash-dt);H.hs=Math.max(0,H.hs-dt);$('hs').style.opacity=Math.min(1,H.hs*2);
  H.kick=Math.max(0,H.kick-dt*.5);H.hm=Math.max(0,H.hm-dt);$('xh').style.borderColor=H.hm>0?'#fff':'rgba(255,90,60,.9)';
  $('xh').style.transform='scale('+(H.ads?.62:(1+H.kick*5+(p.v?0.6:0)))+')';
