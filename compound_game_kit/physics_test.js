@@ -153,8 +153,8 @@ try {
   fire('keydown', { code: 'KeyE' }); stepFrames(2); fire('keyup', { code: 'KeyE' });
   check('exited car with E', !vm.runInContext('!!drive', vmc));
 
-  // ---- 6. campaign: op3 sabotaged state + QRF timer progression (op1 = boot camp)
-  vm.runInContext('startCampaign(2)', vmc); stepFrames(10);
+  // ---- 6. campaign: op4 (BLACKOUT, after the two new downtown ops) sabotaged state + QRF timer progression
+  vm.runInContext('startCampaign(4)', vmc); stepFrames(10);
   vm.runInContext(`C[act].x=60;C[act].z=104;C[act].y=0`, vmc); // on the shipment
   stepFrames(30);
   const staged = vm.runInContext('missionState.stage', vmc);
@@ -228,9 +228,10 @@ try {
 
   // ---- 16. teammates fight independently (not glued to formation)
   vm.runInContext('startGame(MODES.SINGLE,"compound")', vmc); stepFrames(5);
-  const tRes = vm.runInContext("(function(){const b=bots.find(b=>!b.dead&&!b.friend);if(!b){return {d0:-1}}" +
+  const tRes = vm.runInContext("(function(){const b=bots.find(b=>!b.dead&&!b.friend&&!b.dog);if(!b){return {d0:-1}}" +
    /* pin an enemy on the camp's open south pad and put the squad 4 m away */
-   "b.x=148;b.z=66;b.y=support(148,66,0);b.home=[146,150,64,68];b.wp=[148,66];b.dead=0;" +
+   "b.x=148;b.z=66;b.y=support(148,66,0);b.home=[146,150,64,68];b.wp=[148,66];b.dead=0;b.sniper=0;" +
+   "bots.forEach(bb=>{if(bb!==b){bb.x=-400;bb.z=-450;bb.y=support(-400,-450,0);bb.wp=[-400,-450]}});" +
    "C[act].x=148;C[act].z=74;C[act].y=support(148,74,0);" +
    "const o=C[1];o.x=148;o.z=70;o.y=support(o.x,o.z,0);o.cd=.01;" +
    "return {d0:Math.hypot(o.x-148,o.z-66)}})()", vmc);

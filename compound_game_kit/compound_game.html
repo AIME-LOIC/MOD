@@ -1565,6 +1565,74 @@ function buildSchool(){
  forNear(XB0,ZB0,XB1,ZB1,topsGrid,tops,()=>{});
  col.forEach(b=>{if(b[4]>4.5&&b[1]-b[0]>4&&b[3]-b[2]>4)REAL_BL.push(b)});
  gridBuild()}
+/* ============================================================ GLB ASSETS — real cars, houses, skyscraper, hotel
+   Authored GLBs (tools/build_assets.py): per-part nodes named Car_/House_/Tower_/Hotel_.
+   Parts become meshes + AABB colliders; windows are see-through, stairs get walkable tops,
+   Car_ bodies group into one vehicle. Damage model: player shots + explosions wear cars down
+   until they torch (blackened wreck + fire). */
+const ASSETS={};
+function loadAssets(){['car_sedan.glb','car_van.glb','car_pickup.glb','house_small.glb','house_duplex.glb','skyscraper.glb','hotel.glb'].forEach(fn=>{
+ if(typeof THREE.GLTFLoader!=='function')return;
+ try{new THREE.GLTFLoader().load(fn,g=>{ASSETS[fn]=g.scene},undefined,()=>{})}catch(e){}})}
+loadAssets();
+function spawnGLB(fn,x,z,ry,parent){
+ const src=ASSETS[fn];if(!src)return null;
+ const gg=new THREE.Group();gg.position.set(x,0,z);if(ry)gg.rotation.y=ry;(parent||worldGroup).add(gg);
+ const rot=Math.abs(Math.sin(ry||0))>.7; // buildings stay axis-aligned; cars may park at 90°
+ let c0=[1e9,1e9],c1=[-1e9,-1e9];
+ src.traverse(o=>{if(!o.isMesh)return;
+  const nm=o.name||'',pa=o.geometry.attributes.position;
+  let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
+  for(let i=0;i<pa.count;i++){const px=pa.getX(i),py=pa.getY(i),pz=pa.getZ(i);
+   if(px<mnx)mnx=px;if(px>mxx)mxx=px;if(py<mny)mny=py;if(py>mxy)mxy=py;if(pz<mnz)mnz=pz;if(pz>mxz)mxz=pz}
+  let wx0=mnx+x,wx1=mxx+x,wz0=mnz+z,wz1=mxz+z;
+  if(rot){const cx=(x0=>x0)(0);const mx2=(wx0+wx1)/2,mz2=(wz0+wz1)/2,dx=wx1-wx0,dz=wz1-wz0;wx0=mx2-dz/2;wx1=mx2+dz/2;wz0=mz2-dx/2;wz1=mz2+dx/2}
+  if(nm.indexOf('Car_')===0){c0=[Math.min(c0[0],wx0),Math.min(c0[1],wz0)];c1=[Math.max(c1[0],wx1),Math.max(c1[1],wz1)];
+   const m2=new THREE.Mesh(o.geometry,new THREE.MeshStandardMaterial({vertexColors:true,roughness:.45,metalness:.35}));m2.castShadow=!LOD;gg.add(m2);return}
+  const glass=/win|glass/i.test(nm);
+  const m2=new THREE.Mesh(o.geometry,glass?new THREE.MeshStandardMaterial({roughness:.15,metalness:.4,transparent:true,opacity:.5}):new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88}));
+  m2.castShadow=!LOD&&!glass;m2.receiveShadow=true;gg.add(m2);
+  if(glass)return; // windows: see-through, vaultable
+  if(/step/i.test(nm)){tops.push([wx0,wx1,wz0,wz1,mxy+.01]);return} // stairs: walkable tops, no wall
+  col.push([wx0,wx1,wz0,wz1,mxy]);
+  if(mxy>3.6)tops.push([wx0+.3,wx1-.3,wz0+.3,wz1-.3,mxy])});
+ return c1[0]<1e8?{x0:c0[0],x1:c1[0],z0:c0[1],z1:c1[1]}:null}
+function mkGLBCar(x,z,ry,kind){ // drivable + damageable authored car
+ const g=new THREE.Group();const ext=spawnGLB('car_'+kind+'.glb',0,0,0,g);if(!ext)return null;
+ const len=ext.x1-ext.x0,wid=ext.z1-ext.z0;
+ g.position.set(x,0,z);g.rotation.y=ry;worldGroup.add(g);
+ const rot=Math.abs(Math.sin(ry||0))>.7;
+ const hx=rot?len/2:wid/2,hz=rot?wid/2:len/2;
+ const c={g,x,z,r:ry,v:0,vx:0,vz:0,wheels:[],steer:0,hp:100,kind:kind,cbox:[x-hx,x+hx,z-hz,z+hz,1.7]};
+ col.push(c.cbox);cars.push(c);return c}
+function buildDowntown(){
+ /* DOWNTOWN — the Syndicate's glass district: enterable skyscrapers + hotel (rooftop pool HVT nest)
+    + a real house row, all authored GLBs, drivable GLB cars, plaza fountain. */
+ WATER.push({x0:-4,x1:4,z0:26,z1:34,y:.4,bed:-.5}); // plaza fountain (wade)
+ const fr=new THREE.Mesh(new THREE.CircleGeometry(4.4,24),M(0x2a4a5c,{roughness:.2,metalness:.5}));fr.rotation.x=-Math.PI/2;fr.position.set(0,.38,30);worldGroup.add(fr);
+ [[-4.4,0],[4.4,0]].forEach(p2=>col.push([p2[0]-.4,p2[0]+.4,25.6,34.4,.9]));
+ const rim=new THREE.Mesh(new THREE.TorusGeometry(4.4,.35,8,28),M(0x8a8578,{roughness:.9}));rim.rotation.x=Math.PI/2;rim.position.set(0,.55,30);worldGroup.add(rim);
+ col.push([-4.8,-4,25.6,34.4,.9],[4,4.8,25.6,34.4,.9],[-4.4,4.4,25.2,26,.9],[-4.4,4.4,34,34.4,.9]);
+ /* two Syndicate towers flanking the plaza + the hotel pair across the street; rooftop pools = water zones */
+ spawnGLB('skyscraper.glb',-42,0,0);spawnGLB('skyscraper.glb',42,0,0);
+ spawnGLB('hotel.glb',-50,-52,0);spawnGLB('hotel.glb',50,-52,0);
+ [[-50,-52],[50,-52]].forEach(hp2=>{const yr=28.4;
+  WATER.push({x0:hp2[0]-11.5,x1:hp2[0]-2.5,z0:hp2[1]-2.5,z1:hp2[1]+2.5,y:yr+.7,bed:yr-.2,deep:1})});
+ /* real house row along the north street */
+ [-51,-34,-17,0,17,34,51].forEach((hx2,i)=>spawnGLB(i%2?'house_duplex.glb':'house_small.glb',hx2,46,0));
+ /* street dressing */
+ lamps([[-8,58],[8,58],[-24,20],[24,20],[-70,-20],[70,-20],[-16,-78],[16,-78]]);
+ ammoCrate(-6,44,'');ammoCrate(6,44,'');ammoCrate(0,-30,'');
+ sandbags(-10,12,0,6);sandbags(10,12,0,6);
+ /* drivable authored cars parked around the plaza */
+ mkGLBCar(14,40,Math.PI/2,'sedan');mkGLBCar(-14,40,Math.PI/2,'pickup');mkGLBCar(0,14,0,'van');
+ mkGLBCar(26,-8,Math.PI/2,'sedan');mkGLBCar(-26,-8,Math.PI/2,'pickup');mkGLBCar(0,-70,0,'van');
+ spawnDogs([[-60,30],[60,30],[30,-30],[-30,-30]]);
+ spawnBots([[-52,-10,-30,10],[-32,-10,-14,10],[32,-10,-14,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]],.18);
+ labelAreas([[-52,-10,-30,10],[-32,-10,-14,10],[32,-10,-14,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]],'Syndicate');
+ REAL_BL=[];REAL_BL.length=0;
+ col.forEach(b=>{if(b[4]>4.5&&b[1]-b[0]>4&&b[3]-b[2]>4)REAL_BL.push(b)});
+ gridBuild()}
 function buildMap(name){
  clearWorld();
  WATER.length=0;
@@ -1654,6 +1722,8 @@ function buildMap(name){
   if(BAKE)baker.build(worldGroup); gridBuild();
 }else if(name==='realcity'){ // REALCITY — REAL-WORLD-DATA CITY MAP built from warzone_city.glb (Blender export)
   buildRealCity();
+ }else if(name==='downtown'){ // DOWNTOWN — authored GLB district: towers, hotel, real houses
+  buildDowntown();
  }else if(name==='school'){ // SOS CAMPUS — school map built from sos_technical_school_v3.glb (trimesh export)
   buildSchool();
 }else if(name==='killhouse'){ // KILLHOUSE — CQB PVP arena: the image map, one huge enclosed hall
@@ -1853,7 +1923,9 @@ function explode(p){snd(.4,.35);boomSnd();const m=new THREE.Mesh(new THREE.Spher
  grenadeScore(p);
  for(let i=0;i<5;i++)puff(p.x+RR(-1,1),p.y+RR(0,1),p.z+RR(-1,1),RR(-.8,.8),RR(1,3),RR(-.8,.8),RR(2,3.5),.5,3,1);
  bots.forEach((b,i)=>{const d=Math.hypot(b.x-p.x,b.z-p.z);if(!b.dead&&d<8&&Math.abs((b.y+1)-p.y)<4)killBot(i,false)});
- cars.forEach(c2=>{if(c2.patrol&&!c2.dead&&Math.hypot(c2.x-p.x,c2.z-p.z)<7){c2.dead=1;c2.v=0;torchCar(c2);note('PATROL CAR DESTROYED',2)}});
+ cars.forEach(c2=>{const d2=Math.hypot(c2.x-p.x,c2.z-p.z);
+  if(c2.patrol&&!c2.dead&&d2<7){c2.dead=1;c2.v=0;torchCar(c2);note('PATROL CAR DESTROYED',2)}
+  else if(c2.kind&&!c2.burnt&&!c2.dead&&d2<7){c2.burnt=1;torchCar(c2);note('VEHICLE DESTROYED',2)}});
  C.forEach(c=>{const d=Math.hypot(c.x-p.x,c.z-p.z);if(d<8&&Math.abs(c.y+1-p.y)<4){hurt(50*(1-d/8))}})}
 function torchCar(c){c.g.traverse(o=>{if(o.material&&o.material.color&&!o.material.emissive)o.material.color.setHex(0x1c1815)});
  fires.push({x:c.x,z:c.z,y:1.1,bx:c.x,bz:c.z,gl:null,rate:.13,next:0,h:14,core:{scale:{set(){}}},dark:1})}
@@ -1881,7 +1953,7 @@ function hurt(n){ if(mode===MODES.LAN&&lanRole!=='coop')n*=.8;H.hp-=n;H.hurt=.4;
  if(H.hp<=0){if(drive)exitCar();if(mode===MODES.LAN)lanSend({t:'ev',k:'death'});respawnAll();H.hp=100;wstate.rifle.am=30;wstate.rifle.rs=Math.max(wstate.rifle.rs,60);wstate.pistol.am=36;switchW('rifle');H.gr=mapName==='camp'?8:3;H.msg=2.5}}
 function respawnAll(){C.forEach((c,i)=>{const sp=spawnPoint();c.x=sp.x+RR(-3,3);c.z=sp.z+RR(-3,3);c.y=support(c.x,c.z,0);c.vy=0;c.ground=1;c.hp=100})}
 function riverGuard(p){/* swimmers now: deep water is handled by buoyancy in mover() — old invisible walls removed */}
-function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:mapName==='school'?{x:8,z:50}:{x:60,z:20}}
+function spawnPoint(){return mapName==='killhouse'?{x:W/2,z:D-6}:mapName==='compound'?{x:105,z:58}:mapName==='camp'?{x:158,z:60}:mapName==='outskirts'?{x:106,z:58}:mapName==='realcity'?{x:0,z:30}:mapName==='school'?{x:8,z:50}:mapName==='downtown'?{x:0,z:58}:{x:60,z:20}}
 /* squad + bots */
 function mkChar(d,x,z,c){const g=human(d);const sk=skinMixer(g);if(sk){
   /* skinned body replaces the procedural look: hide every procedural mesh, then carry
@@ -1974,6 +2046,9 @@ function shoot(ch,fx_,fz_){ const isP=ch===C[act],W2=WPNS[curW],pistolMode=curW=
  const r=new THREE.Vector3().crossVectors(f,cam.up).normalize(),m=cam.position.clone().addScaledVector(f,.9).addScaledVector(r,.14).add(new THREE.Vector3(0,-.13,0));
  tracer(m,e);spark(e);shotSnd(isP&&CHARS[act].gun==='sr'||pistolMode);H.flash=.05;H.kick=pistolMode?.09:.05;lp=Math.min(1.3,lp+(H.ads?.002:pistolMode?.007:.005));yaw+=(Math.random()-.5)*.004;
  if(isP){const smk=new THREE.Mesh(new THREE.SphereGeometry(.09,6,5),new THREE.MeshBasicMaterial({color:0x9aa0a6,transparent:true,opacity:.25,depthWrite:false}));smk.position.copy(m);S.add(smk);FX.push({m:smk,t:.3,grow:1})}
+ else if(isP){for(let ci=cars.length;ci--;){const c2=cars[ci];if(c2===drive||c2.plane||c2.boat||c2.hp===undefined||c2.burnt)continue;
+  const bx2=c2.cbox;if(e.x>bx2[0]-.2&&e.x<bx2[1]+.2&&e.z>bx2[2]-.2&&e.z<bx2[3]+.2&&e.y<(bx2[4]||1.8)+.6){
+   c2.hp-=W2.dmg;spark(e);if(c2.hp<=0){c2.burnt=1;torchCar(c2);note('VEHICLE DESTROYED',2);killfeed('YOU','VEHICLE','WRECKED')}}}}
  if(who){H.hm=.15;hitSnd();const hs=hy>who.y+1.52,sn=isP&&CHARS[act].gun==='sr';who.hp-=hs?999:(sn?85:W2.dmg);if(who.hp<=0)killBot(bots.indexOf(who),hs)}
  if(isP){for(let ti=targs.length;ti--;){const t2=targs[ti];if(!t2.up||!t2.drone)continue;
   const rx=t2.x-ch.x,rz=t2.z-ch.z,ry=t2.y===undefined?t2.alt:t2.y;if(ry===undefined)continue;
@@ -2071,6 +2146,16 @@ const HOSTILES={}; // map home-key -> label
 function hk(q){return q.join(',')}
 function labelAreas(list,label){list.forEach(q=>{HOSTILES[hk(q)]=label})}
 const CAMPAIGN=[
+ {title:'OP: GLASS CITY',map:'downtown',brief:'The Syndicate runs the war from Downtown — glass towers, a fortified hotel and a street of safehouses. Hit the district and clear every zone.',
+  setup(){const zones=[[-52,-10,-30,10],[-32,-10,-14,10],[32,-10,-14,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]];spawnBots(zones,.15);labelAreas(zones,'Syndicate');
+   objText('GLASS CITY — clear all Syndicate zones across the towers, hotel and safehouse row');return{type:'clearAll'}},
+  tick(){const left=bots.filter(b=>!b.dead).length;objText('GLASS CITY — '+left+' Syndicate hostiles left');return left===0}},
+ {title:'OP: PENTHOUSE',map:'downtown',brief:'The Syndicate boss lives on the hotel roof — pool deck, private bar, sniper guard. Fight floor by floor and finish him.',
+  setup(){const zones=[[-59,-61,-41,-43],[41,-61,59,-43],[-60,42,-40,56],[40,42,60,56],[-52,-10,-30,10],[52,-10,-30,10]];spawnBots(zones,.35);labelAreas(zones,'Syndicate Elite');
+   const hz={x:50,z:-52};return{type:'hvt',x:hz.x,z:hz.z}},
+  tick(st){const p=C[act];const d=Math.hypot(p.x-st.x,p.z-st.z);
+   objText('PENTHOUSE — storm the east hotel, reach the rooftop pool ('+Math.round(d)+' m)');
+   if(d<9&&p.y>27){note('HVT ELIMINATED — the Syndicate is done.',4);return true}return false}},
  {title:'OP: BOOT CAMP',map:'camp',brief:'Your squad trains at Camp Alpha, its own base outside the war zone. Run the range, then board the cargo plane and jump into the war.',
   setup(){trainReset();objText('TRAINING — complete all 7 stations, then board the cargo plane (E)');
    return{type:'deploy',stage:'brief',x:150,z:-4,r:10}},
@@ -2181,9 +2266,8 @@ $('btnOnline').onclick=()=>{onlineMode=0;showSub(`
  <div class="mrow"><button class="mbtn" id="onQuick">QUICK MATCH<small>fastest way into a fight</small></button><button class="mbtn" id="onBrowse">BROWSE ROOMS<small>see public rooms</small></button></div>
  <div id="roomList" style="margin:4px 0"></div>
  <input class="minput" id="inRoom" placeholder="Room code (e.g. alpha) — share it with friends" maxlength="20" value="${lanRoom||''}">
- <input class="minput" id="inName" placeholder="Your callsign" maxlength="16" value="${lanName}">
- <div class="mrow">
-  <button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
+ <input class="minput" id="inName" placeholder="Your callsign" maxlength="16" value="${lanName}"> <div class="mrow"><button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
+ <button class="mbtn" id="mapDowntown" style="border-color:#c9a75a">DOWNTOWN<small>GLB towers &amp; hotel</small></button>
  <button class="mbtn" id="mapKillhouse" style="border-color:#c96a5a">KILLHOUSE<small>CQB arena — image map</small></button></div>
  <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button><button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button></div>
  <div class="mrow"><button class="mbtn" id="onCoop">HOST CO-OP<small>fight bots together</small></button><button class="mbtn" id="onFFA">DEATHMATCH<small>first to 15</small></button></div>
@@ -2201,7 +2285,8 @@ $('btnStory').onclick=()=>showSub(CAMPAIGN.map((m,i)=>`<button class="mbtn" data
 $('btnSingle').onclick=()=>showSub(`
  <div style="text-align:center;color:#8fa7bb;font-size:12px;margin-bottom:6px">Pick a map, then deploy:</div>
  <div class="mrow"><button class="mbtn" id="mapCompound">COMPOUND<small>warzone &amp; city</small></button>
- <button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button></div>
+ <button class="mbtn" id="mapDowntown" style="border-color:#c9a75a">DOWNTOWN<small>real GLB towers &amp; hotel</small></button></div>
+ <div class="mrow"><button class="mbtn" id="mapRealCity" style="border-color:#8aa86a">REALCITY<small>real-world 3D city map</small></button></div>
  <div class="mrow"><button class="mbtn" id="mapSchool" style="border-color:#6aa8a0">SOS CAMPUS<small>school map — close quarters</small></button>
  <button class="mbtn" id="mapOutskirts">OUTSKIRTS<small>farms &amp; woodland</small></button></div>
  <div class="mrow"><button class="mbtn" id="mapBlackout">BLACKOUT<small>industrial port</small></button></div>
@@ -2220,7 +2305,7 @@ $('btnLan').onclick=()=>showSub(`
  <div style="text-align:center;color:#62778a;font-size:11px;margin-top:6px" id="lanHint">Pick a map, then choose a mode to connect</div>`);
 function wireMapButtons(){
  const wire=(id,name)=>{const b=$(id);if(!b)return;b.className='mbtn'+(mapName===name?' on':'');b.onclick=()=>{mapName=name;wireMapButtons()}};
- wire('mapCompound','compound');wire('mapKillhouse','killhouse');wire('mapRealCity','realcity');wire('mapSchool','school');wire('mapOutskirts','outskirts');wire('mapBlackout','blackout')}
+ wire('mapCompound','compound');wire('mapKillhouse','killhouse');wire('mapRealCity','realcity');wire('mapSchool','school');wire('mapDowntown','downtown');wire('mapOutskirts','outskirts');wire('mapBlackout','blackout')}
 wireMapButtons();
 function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>startCampaign(+b.dataset.m));wireMapButtons();
  const sg=$('singleGo');if(sg)sg.onclick=()=>startGame(MODES.SINGLE,mapName==='killhouse'?'compound':mapName);
@@ -2230,7 +2315,7 @@ function wireSubs(){msubs.querySelectorAll('[data-m]').forEach(b=>b.onclick=()=>
   msubs.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{$('inRoom').value=b.dataset.r;lanStart(lanRole||'coop')})}};setTimeout(()=>{try{w3.close()}catch(e){}},15000)}catch(e){}};
   oc.onclick=()=>onStart('coop');of.onclick=()=>onStart('ffa')}}
 function lanStart(role,quick){lanRole=role;lanRoom=$('inRoom')?$('inRoom').value.trim():'';lanName=$('inName')?($('inName').value.trim()||'Operator'):'Operator';
- if($('mapKillhouse')&&['killhouse','compound','realcity','school','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
+ if($('mapKillhouse')&&['killhouse','compound','realcity','school','downtown','outskirts','blackout'].indexOf(mapName)<0)mapName='compound';
  const ih=$('inHost')?$('inHost').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'';
  const a=ih||($('inAddr')?$('inAddr').value.trim().replace(/^https?:\/\//,'').replace(/\/+$/,''):'');lanAddr=a;
  const base=a?(location.protocol==='https:'?'https://':'http://')+a:'';
@@ -2259,8 +2344,8 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  /* desktop: hide touch buttons (FIRE/JUMP/…) + weapon bar for a clean CoD-style HUD; mobile keeps them */
  const isTouch=('ontouchstart'in window)||(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0);
  if(!isTouch){$('ctl').style.display='none';$('sw').style.display='none'}
- $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':map==='school'?'SOS CAMPUS — School Raid':'Blackout — Port';
- $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':map==='school'?'School campus mesh — dorms, classrooms, dining hall · climb to the roofs':'Open warfare zone — clear hostiles, grab a car (E)';
+ $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':map==='school'?'SOS CAMPUS — School Raid':map==='downtown'?'DOWNTOWN — Glass City':'Blackout — Port';
+ $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':map==='school'?'School campus mesh — dorms, classrooms, dining hall · climb to the roofs':map==='downtown'?'Syndicate district — enterable towers & hotel, drivable GLB cars, rooftop pool nest':'Open warfare zone — clear hostiles, grab a car (E)';
  if(mode===MODES.CAMPAIGN){const ms=CAMPAIGN[mission];note(ms.title+' — '+ms.brief,6);missionState=ms.setup();if(mission!==0)riverGuard(C[act])}
  else if(mode===MODES.TRAIN){ // pure training on its own CAMP map: no hostiles anywhere
   bots.length=0;trainReset();
