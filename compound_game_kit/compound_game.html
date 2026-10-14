@@ -1178,8 +1178,8 @@ function ruin(x0,x1,z0,z1,h,c,nm){const w=x1-x0,d=z1-z0,cx_=(x0+x1)/2,cz=(z0+z1)
  for(let i=0,n=3+((w*d)/60|0);i<n;i++){const x=x0+1.5+rnd()*(w-3),z=z0+1.5+rnd()*(d-3),q=.5+rnd()*.8;
   box(q,q*.7,q,crateM[i%3],x,q*.35,z,worldGroup);col.push([x-q/2,x+q/2,z-q/2,z+q/2,q])}}
 const fires=[];
-/* KILLHOUSE PVP arena: spawn ring + resupply crates (filled by buildKillhouse) */
-const killSpawns=[],ammoCrates=[];
+/* KILLHOUSE PVP arena: spawn ring, room spawn cells + resupply crates (filled by buildKillhouse) */
+const killSpawns=[],ammoCrates=[],killCells=[];
 function burningCar(x,z,r){const g=new THREE.Group(),burnt=M(0x241f1c,{roughness:.55,metalness:.35}),P2=(w,h,d,m,px2,py,pz)=>{const e=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);e.position.set(px2,py,pz);e.castShadow=e.receiveShadow=true;g.add(e)};
  P2(1.85,.5,4.4,burnt,0,.55,0);P2(1.65,.55,2.2,M(0x0c0e10,{roughness:.3,metalness:.5}),0,1.05,-.1);
  [[-.85,1.4],[.85,1.4],[-.85,-1.4],[.85,-1.4]].forEach(a=>{const w=new THREE.Mesh(new THREE.CylinderGeometry(.36,.36,.28,10),M(0x0a0a0a));w.rotation.x=Math.PI/2;w.position.set(a[0],.36,a[1]);g.add(w)});
@@ -1224,22 +1224,28 @@ function buildKillhouse(){
   if(cur<U1)seg(cur,U1,0,KH_H)};
  khWinWall(cx0,cz0,cx0+KH_W,cz0+.6);khWinWall(cx0,cz0+KH_D-.6,cx0+KH_W,cz0+KH_D);
  khWinWall(cx0,cz0,cx0+.6,cz0+KH_D);khWinWall(cx0+KH_W-.6,cz0,cx0+KH_W,cz0+KH_D);
- /* ---- ROOM GRID: 10 x 4 cells with door gaps (like the photo) ---- */
- const CW=19.4,CD=26.5,gap=1.6,T=.35,rows=[cz0+.6],cols=[cx0+.6];
- for(let i=0;i<10;i++)cols.push(cols[i]+CW);for(let j=0;j<4;j++)rows.push(rows[j]+CD);
+ /* ---- ROOM GRID: 13 x 6 cells with door gaps — tighter cells, way more rooms ---- */
+ const CW=(KH_W-1.2)/13,CD=(KH_D-1.2)/6,gap=1.6,T=.35,rows=[cz0+.6],cols=[cx0+.6];
+ for(let i=0;i<13;i++)cols.push(cols[i]+CW);for(let j=0;j<6;j++)rows.push(rows[j]+CD);
+ /* ---- STAIRWELL CELLS: four open atrium cells get a straight 15-step flight (rise .5 < .56
+    engine step-up) from the arena floor up to the long catwalk decks at y=7.5 ---- */
+ const stairAt=[[2,0],[10,0],[2,5],[10,5]];
+ const isStairNS=(i,j)=>stairAt.some(s=>(i===s[0]||i===s[0]+1)&&j===s[1]);
+ const isStairEW=(j,i)=>stairAt.some(s=>(j===s[1]||j===s[1]+1)&&i===s[0]);
  /* shared N-S partitions with door gaps (skip doors every other cell for streets) */
- const px0=cols[4],px1=cols[6]; // central spawn plaza span
- for(let i=1;i<10;i++){const x=cols[i];
-  for(let j=0;j<4;j++){const zA=rows[j]+.35,zB=rows[j+1]-.35,mid=(zA+zB)/2,skip=(j===1||j===2)&&(i%3===1);   if(skip||(j===1||j===2)&&(x>px0-2.5&&x<px1+2.5))continue; // open lane / spawn plaza
+ const px0=cols[5],px1=cols[8]; // central spawn plaza span
+ for(let i=1;i<13;i++){const x=cols[i];
+  for(let j=0;j<6;j++){const zA=rows[j]+.35,zB=rows[j+1]-.35,mid=(zA+zB)/2,skip=(j===2||j===3)&&(i%3===1);   if(skip||(j===2||j===3)&&(x>px0-2.5&&x<px1+2.5)||isStairNS(i,j))continue; // open lane / spawn plaza / stairwell cells
    const half=(zB-zA)/2,dw=gap*(1+(rnd()<.35?1:0));
    wallBox(x-T,zA,x+T,mid-dw/2,3.6,0,i%2?wall2:wallM);wallBox(x-T,mid+dw/2,x+T,zB,3.6,0,i%2?wall2:wallM);
    wallBox(x-T,mid-dw/2,x+T,mid+dw/2,1.5,2.2,i%2?wall2:wallM); // lintel: real door-height opening
    if(rnd()<.4)wallBox(x-T,mid-dw/2,x+T,mid+dw/2,.9,0,wallM); // sometimes a window sill you can vault
   }}
  /* shared E-W partitions with door gaps */
- for(let j=1;j<4;j++){const z=rows[j];
-  for(let i=0;i<10;i++){const xA=cols[i]+.35,xB=cols[i+1]-.35,mid=(xA+xB)/2;
-   if((j===1||j===2)&&i>=3&&i<=6)continue; // keep the central spawn plaza fully open
+ for(let j=1;j<6;j++){const z=rows[j];
+  for(let i=0;i<13;i++){const xA=cols[i]+.35,xB=cols[i+1]-.35,mid=(xA+xB)/2;
+   if(isStairEW(j,i))continue; // stairwell cells stay fully open — the flight inside climbs floor→catwalk
+   if((j===2||j===3)&&i>=4&&i<=8)continue; // keep the central spawn plaza fully open
    if(i%3===2){wallBox(xA,z-T,xB,z+T,3.6,0,wall2);continue} // solid corridor walls
    const half=(xB-xA)/2,dw=gap*(1+(rnd()<.35?1:0));
    wallBox(xA,z-T,mid-dw/2,z+T,3.6,0,wallM);wallBox(mid+dw/2,xB,z-T,z+T,3.6,0,wallM);
@@ -1279,9 +1285,18 @@ function buildKillhouse(){
  [[cz0+10,-1],[cz0+KH_D-10,1]].forEach(cw=>{const z=cw[0],k=cw[1];
   box(KH_W-30,.28,2.4,steel,cx0+KH_W/2,7.36,z,worldGroup);tops.push([cx0+15,cx0+KH_W-15,z-1.2,z+1.2,7.5]);
   const rz=z+(k?1.05:-1.05);box(KH_W-30,.85,.09,steel,cx0+KH_W/2,8.05,rz,worldGroup);col.push([cx0+15,cx0+KH_W-15,rz-.09,rz+.09,8.5,7.5])});
+ /* ---- STAIR CELLS: real climbable stairwells — 15 steps straight up to the catwalk decks ---- */
+ stairAt.forEach(s2=>{const i2=s2[0],j2=s2[1],up=j2===0?1:-1;
+  const zC=j2===0?cz0+8.2:cz0+KH_D-8.2,zp=j2===0?[cz0+7.25,cz0+11.4]:[cz0+KH_D-11.25,cz0+KH_D-6.95];
+  for(let k=0;k<15;k++){const xa=up>0?cols[i2]+.8+k*.92:cols[i2+1]-.8-(k+1)*.92;
+   box(.92,(k+1)*.5,1.9,conc,xa+.46,(k+1)*.25,zC,worldGroup);
+   tops.push([xa,xa+.92,zC-.95,zC+.95,(k+1)*.5])}
+  const xb=up>0?cols[i2]+14.15:cols[i2]+1.6;
+  box(2.2,.24,zp[1]-zp[0],conc,xb,7.38,(zp[0]+zp[1])/2,worldGroup);
+  tops.push([xb-1.1,xb+1.1,zp[0],zp[1],7.5])});
  /* ---- YARD COVER: sandbags, crates, containers, concrete barriers ---- */
- const freeCells=[];for(let i=0;i<10;i++)for(let j=0;j<4;j++)freeCells.push([cols[i],rows[j]]);
- for(let i=0;i<26;i++){const c=freeCells[(rnd()*freeCells.length)|0],x=c[0]+CW/2+RR(-4,4),z=c[1]+CD/2+RR(-6,6);
+ const freeCells=[];for(let i=0;i<13;i++)for(let j=0;j<6;j++)freeCells.push([cols[i],rows[j]]);
+ killCells.length=0;freeCells.forEach((c,ix)=>{if(ix%5!==0)return;killCells.push([c[0]+1,c[0]+CW-1,c[1]+1,c[1]+CD-1])});  for(let i=0;i<44;i++){const c=freeCells[(rnd()*freeCells.length)|0],x=c[0]+CW/2+RR(-4,4),z=c[1]+CD/2+RR(-6,6);
   if(Math.hypot(x-W/2,z-(D/2+18))<12)continue;
   const q=1.1+rnd()*.9;box(q,q,q,crateM[(rnd()*3)|0],x,q/2,z,worldGroup);col.push([x-q/2,x+q/2,z-q/2,z+q/2,q]);
   if(rnd()<.4){box(q,q,q,crateM[(rnd()*3)|0],x+q*.2,q*1.5,z,worldGroup);col.push([x-q/2,x+q/2,z-q/2,z+q/2,q*2])}}
@@ -1331,8 +1346,8 @@ function realCityFallback(){
   const w=RR(14,22),d=RR(14,22),h=RR(5,15);
   cityBuilding(cx2-w/2,cx2+w/2,cz2-d/2,cz2+d/2,h,[0x6a655c,0x5d6154,0x705f4e][Math.abs(gx*3+gz)%3],h>9?1:0,0,1)}
  lamps([[-36,-24],[36,-24],[-36,48],[36,48],[0,-60],[0,12],[72,12],[-72,12]]);
- makeCar(8,-20,0,0x4a5a3a);makeCar(-12,20,Math.PI/2,0x37475a);makeCar(30,48,Math.PI,0x555a48);
- ammoCrate(6,-10,'');ammoCrate(-8,6,'');burningCar(-24,-16,0.4);rubble(18,-8,1.8);
+ (mkGLBCar(8,-20,0,'sedan')||makeCar(8,-20,0,0x4a5a3a));(mkGLBCar(-12,20,Math.PI/2,'van')||makeCar(-12,20,Math.PI/2,0x37475a));(mkGLBCar(30,48,Math.PI,'pickup')||makeCar(30,48,Math.PI,0x555a48));
+ ammoCrate(6,-10,'');ammoCrate(-8,6,'');ammoCrate(24,4,'');burningCar(-24,-16,0.4);rubble(18,-8,1.8);
  const warL=new THREE.PointLight(0xff8a3a,.7,46,1.7);warL.position.set(0,6,0);worldGroup.add(warL);lights.push(warL);
  gridBuild();
 }
@@ -1359,6 +1374,14 @@ function buildRealCity(){
   const ncomp2={5126:4,5123:2,5125:4,5121:1,5122:2}[a.componentType];
   const nper={SCALAR:1,VEC2:2,VEC3:3,VEC4:4}[a.type];
   return new comp(bin.buffer,bin.byteOffset+(bv.byteOffset||0)+(a.byteOffset||0),a.count*nper*ncomp2)};
+ const accessC=ai=>{const a=gltf.accessors[ai],bv=gltf.bufferViews[a.bufferView||0],nper=a.type==='VEC4'?4:3;
+  const comp={5126:Float32Array,5123:Uint16Array,5125:Uint32Array,5121:Uint8Array,5122:Int16Array}[a.componentType]||Uint8Array;
+  return new comp(bin.buffer,bin.byteOffset+(bv.byteOffset||0)+(a.byteOffset||0),a.count*nper)};
+ /* vertex-color material — the city ships with per-face baked colors (brick, glass, soot, cabs);
+    show them instead of one flat color per category */
+ const vcmG=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.93,metalness:.03});
+ const vcmW=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.3,metalness:.5});
+ const vcmV=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.5,metalness:.35});
  /* category materials — the glb carries no textures, so we dress it by mesh-name prefix */
  const mats={
   terrain:M(0x4a4f3a,{roughness:1}),road:M(0x35373b,{roughness:.92}),sidewalk:M(0x55575c,{roughness:.95}),
@@ -1380,15 +1403,23 @@ function buildRealCity(){
   if(!posAccs.length)return;
   /* merge primitives of this node into one world-space geometry */
   let vc=0,ic=0;const pv=[];
-  posAccs.forEach((ai,k)=>{const p=access(ai);pv.push({p,idx:idxAccs[k]});vc+=p.length/3;if(idxAccs[k])ic+=gltf.accessors[idxAccs[k]].count});
-  const P=new Float32Array(vc*3),I=new Uint32Array(ic);let vo=0,io=0;
+  posAccs.forEach((ai,k)=>{const p=access(ai);const ca=mesh.primitives[k].attributes.COLOR_0;
+   pv.push({p,idx:idxAccs[k],c:ca!==undefined?accessC(ca):null,s:ca!==undefined?(gltf.accessors[ca].componentType===5126?1:255):1});
+   vc+=p.length/3;if(idxAccs[k])ic+=gltf.accessors[idxAccs[k]].count});
+  const P=new Float32Array(vc*3),I=new Uint32Array(ic);const hasCol=pv.some(o=>o.c),Ct=hasCol?new Float32Array(vc*4):null;
+  let vo=0,io=0;
   pv.forEach(o=>{P.set(o.p,vo*3);
    if(o.idx){const ix=o.idx;for(let i=0;i<ix.length;i++)I[io+i]=ix[i]+vo;io+=ix.length}
    else{for(let i=0;i<o.p.length/3;i++)I[io+i]=vo+i;io+=o.p.length/3}
+   if(Ct){const pc=o.p.length/3,nc=o.c.length/pc; // 3 or 4 components per vertex
+    for(let i2=0;i2<pc;i2++){const q=i2*nc,k4=(vo+i2)*4;
+     Ct[k4]=o.c[q]/o.s;Ct[k4+1]=o.c[q+1]/o.s;Ct[k4+2]=o.c[q+2]/o.s;Ct[k4+3]=nc>3?o.c[q+3]/o.s:1}}
    vo+=o.p.length/3});
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.BufferAttribute(P,3));
-  geo.setIndex(new THREE.BufferAttribute(I,1));geo.computeVertexNormals();
+  geo.setIndex(new THREE.BufferAttribute(I,1));
+  if(Ct)geo.setAttribute('color',new THREE.BufferAttribute(Ct,4)); // REAL baked vertex colors — no more single-color city
+  geo.computeVertexNormals();
   const nm=(n.name||'').toLowerCase();
   /* world AABB from positions (transforms are identity in this export) */
   let mnx=1e9,mny=1e9,mnz=1e9,mxx=-1e9,mxy=-1e9,mxz=-1e9;
@@ -1396,30 +1427,30 @@ function buildRealCity(){
    if(x<mnx)mnx=x;if(y<mny)mny=y;if(z<mnz)mnz=z;if(x>mxx)mxx=x;if(y>mxy)mxy=y;if(z>mxz)mxz=z}
   if(!(isFinite(mnx)&&isFinite(mxy)))return;
   if(nm.indexOf('building')===0){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;
+   const m=new THREE.Mesh(geo,hasCol?vcmG:matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;
    m.position.set(0,0,0);worldGroup.add(m);
    col.push([mnx,mxx,mnz,mxz,mxy]);
    if(mxy>9){tops.push([mnx+.3,mxx-.3,mnz+.3,mxz-.3,mxy]);ladder((mnx+mxx)/2,mnz-.4,0,mxy)}
    nB++}
   else if(nm.indexOf('vehicle')===0){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,hasCol?vcmV:matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
    col.push([mnx,mxx,mnz,mxz,mxy]);nV++}
   else if(nm.indexOf('rubble')===0){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,hasCol?vcmG:matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
    if(mxy-mny>1.1)col.push([mnx,mxx,mnz,mxz,mxy]);nRb++}
   else if(nm.indexOf('destroyed_landmark')===0){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,hasCol?vcmG:matFor(n.name));m.castShadow=!LOD;m.receiveShadow=true;worldGroup.add(m);
    col.push([mnx,mxx,mnz,mxz,mxy]);if(mxy>7)tops.push([mnx,mxx,mnz,mxz,mxy]);nB++}
   else if(nm.indexOf('road')===0||(nm.indexOf('sidewalk')===0)||(nm.indexOf('park')===0)||(nm.indexOf('terrain')===0)||(nm.indexOf('waterfront')===0)){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,hasCol?vcmG:matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
    if(nm.indexOf('terrain')===0||nm.indexOf('waterfront')===0)tops.push([mnx,mxx,mnz,mxz,mny]);
    else tops.push([mnx,mxx,mnz,mxz,mxy]);
    nRoad++}
   else if(nm.indexOf('pier')===0){
-   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,hasCol?vcmG:matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
    tops.push([mnx,mxx,mnz,mxz,Math.max(mxy,1.2)])}
   else{ /* burning_area, water and anything else: visual only (or walkable water bed) */
-   const m=new THREE.Mesh(geo,matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
+   const m=new THREE.Mesh(geo,nm.indexOf('fire')===0?mats.burning_area:hasCol?(nm.indexOf('water')===0?vcmW:vcmG):matFor(n.name));m.receiveShadow=true;worldGroup.add(m);
    if(nm.indexOf('water')===0)tops.push([mnx,mxx,mnz,mxz,mny])}
  });
  /* real houses in the surveyed blocks' gaps: window openings, interiors, stairs to the roof */
@@ -1436,8 +1467,11 @@ function buildRealCity(){
  /* gameplay dressing: war-zone ambience */
  lamps([[-30,-40],[30,-40],[-30,20],[30,20],[0,-90],[0,40],[60,-10],[-60,-10]]);
  burningCar(-14,-38,0);burningCar(22,-6,Math.PI/2);burningCar(-4,18,.4);
- makeCar(8,-52,0,0x4a5a3a);makeCar(-18,10,Math.PI,0x37475a);
- ammoCrate(4,-64,'');ammoCrate(-26,-2,'');
+ makeCar(8,-52,0,0x4a5a3a);
+ /* drivable GLB cars (engine car pool — enter with E), fall back to the parked static prop */
+ (mkGLBCar(-42,-18,0,'sedan')||makeCar(-42,-18,0,0x4a5a3a));(mkGLBCar(30,14,Math.PI/2,'van')||makeCar(30,14,Math.PI/2,0x37475a));
+ (mkGLBCar(64,-34,-.4,'pickup')||makeCar(64,-34,-.4,0x555a48));(mkGLBCar(-12,52,1.2,'sedan')||makeCar(-12,52,1.2,0x5a4a3a));
+ ammoCrate(4,-64,'');ammoCrate(-26,-2,'');ammoCrate(18,22,'');ammoCrate(-12,-70,'');ammoCrate(56,10,'');
  spawnDogs([[-40,-52],[36,-58],[44,26],[-46,14]]);
  const warL=new THREE.PointLight(0xff8a3a,.7,46,1.7);warL.position.set(0,6,-30);worldGroup.add(warL);lights.push(warL);
  spawnJet();
@@ -2365,8 +2399,7 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  /* desktop: hide touch buttons (FIRE/JUMP/…) + weapon bar for a clean CoD-style HUD; mobile keeps them */
  const isTouch=('ontouchstart'in window)||(typeof navigator!=='undefined'&&navigator.maxTouchPoints>0);
  if(!isTouch){$('ctl').style.display='none';$('sw').style.display='none'}
- $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — Ground Recon':map==='school'?'SOS CAMPUS — School Raid':map==='downtown'?'DOWNTOWN — Glass City':'Blackout — Port';
- $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates in the yard':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'A real city block, rebuilt from survey data — clear the streets, sweep the piers':map==='school'?'School campus mesh — dorms, classrooms, dining hall · climb to the roofs':map==='downtown'?'Syndicate district — enterable towers & hotel, drivable GLB cars, rooftop pool nest':'Open warfare zone — clear hostiles, grab a car (E)';
+ $('infoT').textContent=map==='killhouse'?'KILLHOUSE — PVP Arena':map==='compound'?'Compound Ops — WARZONE CITY':map==='camp'?'Camp Alpha — Training':map==='outskirts'?'Outskirts Assault':map==='realcity'?'REALCITY — NYC GROUND ZERO':map==='school'?'SOS CAMPUS — School Raid':map==='downtown'?'DOWNTOWN — Glass City':'Blackout — Port';  $('infoB').innerHTML=map==='killhouse'?'Close-quarters arena — room-to-room PVP · X pistol · V knife · ammo crates · climb the stairwells & catwalks':map==='compound'?'Forest → lake crossing by boat → WARZONE CITY — Ops 2–6':map==='camp'?'Range · Urban Tactics house · CQB yard — board the plane (E) to deploy':map==='realcity'?'Destroyed Manhattan-style grid — brownstones, Times Square ruins, subway entrances, drivable cars, harbor piers · enter buildings, climb to roofs':map==='school'?'School campus mesh — dorms, classrooms, dining hall · climb to the roofs':map==='downtown'?'Syndicate district — enterable towers & hotel, drivable GLB cars, rooftop pool nest':'Open warfare zone — clear hostiles, grab a car (E)';
  if(mode===MODES.CAMPAIGN){const ms=CAMPAIGN[mission];note(ms.title+' — '+ms.brief,6);missionState=ms.setup();if(mission!==0)riverGuard(C[act])}
  else if(mode===MODES.TRAIN){ // pure training on its own CAMP map: no hostiles anywhere
   bots.length=0;trainReset();
@@ -2377,8 +2410,9 @@ function startGame(m,map){mode=m;mapName=map;running=true;
  else if(mode===MODES.SINGLE){  const areas=map==='compound'?[[36,73,12,34],[96,139,12,37],[8,34,43,69],[167,200,25,81],[32,72,79,102],[65,85,159,183],[99,121,201,225],[131,149,201,225],[28,62,-318,-282],[128,164,-320,-286],[126,158,-236,-206],[178,206,-282,-254],[64,100,-206,-178],[-138,-116,-344,-308],[-92,-70,-344,-308],[-138,-116,-292,-244],[-44,-10,-344,-310],[6,42,-292,-244],[66,124,-330,-286],[104,128,-334,-290],[66,124,-276,-234],[146,168,-276,-234],[64,118,-226,-184],[148,168,-226,-184],[-46,-8,-234,-190],[-148,-62,-380,-362],[-32,54,-380,-362],[86,122,-380,-362],[186,282,-318,-166]]:
   map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59],[171,195,101,129],[25,53,151,177],[121,149,151,179],[181,209,181,209]]:
   map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:
+  map==='realcity'?[[-90,-46,-70,-34],[-70,-34,10,-14],[10,-56,64,-24],[64,-90,104,-50],[-48,-14,0,14],[0,-30,48,6],[48,-14,96,14],[-88,14,-40,52],[40,14,88,52],[3,-6,32,30]]:
   [[21,79,31,69],[111,169,31,69],[31,89,111,149],[151,199,111,149],[110,150,190,215],[110,150,190,215]];
-  const labels=map==='compound'?['Compound Patrol','Warehouse Crew','West Guard','East Sniper','South Guard','City Guard','City Watch','Riverside Patrol','Rubble Squad','North Watch','Highway Crew','East Ruin Post','Plaza Guard','Dock Workers','Pier Crew','Industrial Guard','Waterfront Watch','Harbor Patrol','Tower 1 Security','Tower 2 Security','Downtown Guard','Delta Squad','Street Gang','Residential Watch','Park Rangers','Echo Garrison','Quay Guard','City Militia','Sector C']:map==='outskirts'?['Farm Guard','Barn Crew','South Post','East Guard','Farm 2','Grain Guard','Depot Watch']:['Docks Guard','Warehouse Crew','Yard Crew','North Watch','Container Watch','Pier Guard'];
+  const labels=map==='compound'?['Compound Patrol','Warehouse Crew','West Guard','East Sniper','South Guard','City Guard','City Watch','Riverside Patrol','Rubble Squad','North Watch','Highway Crew','East Ruin Post','Plaza Guard','Dock Workers','Pier Crew','Industrial Guard','Waterfront Watch','Harbor Patrol','Tower 1 Security','Tower 2 Security','Downtown Guard','Delta Squad','Street Gang','Residential Watch','Park Rangers','Echo Garrison','Quay Guard','City Militia','Sector C']:map==='outskirts'?['Farm Guard','Barn Crew','South Post','East Guard','Farm 2','Grain Guard','Depot Watch']:map==='realcity'?['Times Square Crew','Midtown Guard','Harbor Gang','Empire Watch','Grid Squad','Downtown Cell','Park Snipers','Union Sq Crew','Subway Squatters','Broadway Ambush']:['Docks Guard','Warehouse Crew','Yard Crew','North Watch','Container Watch','Pier Guard'];
   areas.forEach((q,i)=>{spawnBots([[q[0],q[1],q[2],q[3]]],.15);labelAreas([q],labels[i]||'Hostile')});
   objText('FREE ROAM — clear '+(areas.length)+' zones or explore. Grenades: G / GRN.')}  else{ // LAN / ONLINE
    if(mapName==='downtown'&&!lanDuelMaps().includes('downtown')){} // (all maps allowed for duels)
@@ -2393,7 +2427,7 @@ function startGame(m,map){mode=m;mapName=map;running=true;
     objText('1v1 DUEL — waiting for your rival… first to 5 kills');
     lanConnect(lanRoom,lanRole,ok=>{if(!ok)note('Could not reach the server — playing offline',3)});
     note('DEPLOYED — good luck, operator.',2.5);snd(.3,.2);return}
-   const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
+   const areas=mapName==='killhouse'?killSpawns.map(s=>[s.x-.1,s.x+.1,s.z-.1,s.z+.1]).concat(lanRole==='ffa'?killCells:[]):(mapName!=='compound'?(map==='outskirts'?[[21,51,31,55],[61,95,21,51],[131,163,29,59]]:map==='school'?[[-12,16,36,58],[44,64,46,58],[24,60,46,58],[-12,60,-108,-34],[-2,24,-38,-12],[-70,-50,46,56]]:map==='downtown'?[[-52,-10,-30,10],[52,-10,-30,10],[-14,-62,14,-42],[14,-62,14,-42],[-58,38,-44,54],[44,38,58,54]]:map==='realcity'?[[-64,-20,-36,6],[-24,-96,20,-64],[20,-24,64,6],[-16,26,40,52],[36,-116,88,-92]]:([[21,79,31,69],[111,169,31,69],[31,89,111,149]])):[[36,73,12,34],[96,139,12,37],[8,34,43,69],[28,62,-318,-282],[126,158,-236,-206],[-44,-10,-292,-244],[66,124,-276,-234],[-32,54,-380,-362]]);
    /* deathmatch gets a bigger bot crowd to fight alongside/against the players */
    const dmExtra=lanRole==='ffa'&&map==='downtown'?[[-58,38,-44,54],[44,38,58,54]]:[];
    areas.concat(dmExtra).forEach((q,i)=>{spawnBots([q],0);labelAreas([q],lanRole==='coop'?'Hostile':'Combatant');const bb=bots[bots.length-1];if(bb&&mapName==='killhouse'){bb.home=[q[0]-2.5,q[0]+2.5,q[2]-2.5,q[2]+2.5];bb.cd=1+i*.5;bb.cd0=1.3+rnd()*.8}});
@@ -2444,8 +2478,8 @@ function mini(){mcx.fillStyle=mapName==='compound'?'#101814':mapName==='killhous
  if(mapName==='killhouse'){ // dedicated arena view: hall + room grid
   const kx=x=>mx(x),kz=z=>mz(z);
   mcx.fillStyle='#3c3a36';mcx.fillRect(kx(5.6),kz(21.6),kx(205.6)-kx(5.6),kz(129.6)-kz(21.6));
-  mcx.fillStyle='#585c64';for(let i=1;i<10;i++)mcx.fillRect(kx(6.2+i*19.4)-1,kz(21.6),2,kz(129.6)-kz(21.6));
-  for(let j=1;j<4;j++)mcx.fillRect(kx(5.6),kz(22.2+j*26.5)-1,kx(205.6)-kx(5.6),2);
+  mcx.fillStyle='#585c64';for(let i=1;i<13;i++)mcx.fillRect(kx(6.2+i*((200-1.2)/13))-1,kz(21.6),2,kz(129.6)-kz(21.6));
+  for(let j=1;j<6;j++)mcx.fillRect(kx(5.6),kz(22.2+j*17.8)-1,kx(205.6)-kx(5.6),2);
   mcx.fillStyle='#8a3a30';mcx.fillRect(kx(100.6),kz(72.6),5,4);mcx.fillStyle='#38607e';mcx.fillRect(kx(105.6),kz(76),5,4);
   mcx.fillStyle='#6b4a32';[[12.6,31.6],[105.6,31.6],[198.6,31.6],[12.6,119.6],[105.6,119.6],[198.6,119.6]].forEach(t=>mcx.fillRect(kx(t[0])-1.5,kz(t[1])-1.5,3,3))}
  else{
